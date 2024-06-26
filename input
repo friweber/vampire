@@ -16,9 +16,9 @@ create:periodic-boundaries-z
 # System dimensions:
 #------------------------------------------
 dimensions:unit-cell-size = 3.524 !A
-dimensions:system-size-x = 7.0 !nm
-dimensions:system-size-y = 7.0 !nm
-dimensions:system-size-z = 7.0 !nm
+dimensions:system-size-x = 10. !nm
+dimensions:system-size-y = 10. !nm
+dimensions:system-size-z = 10. !nm
 
 #------------------------------------------
 # Material Files:
