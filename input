@@ -7,35 +7,43 @@
 #------------------------------------------
 # Creation attributes:
 #------------------------------------------
-dimensions:unit-cell-size = 3.54 !A
-dimensions:system-size-x = 7.7 !nm
-dimensions:system-size-y = 7.7 !nm
-dimensions:system-size-z = 7.7 !nm
+create:crystal-structure=fcc
+create:periodic-boundaries-x
+create:periodic-boundaries-y
+create:periodic-boundaries-z
+
+#------------------------------------------
+# System dimensions:
+#------------------------------------------
+dimensions:unit-cell-size = 3.524 !A
+dimensions:system-size-x = 7.0 !nm
+dimensions:system-size-y = 7.0 !nm
+dimensions:system-size-z = 7.0 !nm
 
 #------------------------------------------
 # Material Files:
 #------------------------------------------
-material:file = Co.mat
+material:file = Ni.mat
 
 #------------------------------------------
 # Simulation attributes:
 #------------------------------------------
-sim:temperature = 300.0
-sim:time-steps-increment = 1000
-sim:total-time-steps = 10000
-sim:time-step = 1 !fs
+sim:equilibration-time-steps=10000
+sim:total-time-steps=250000
+sim:program=time-series
+sim:integrator=llg-heun
+sim:time-step=1.0e-16
+
 
 #------------------------------------------
 # Program and integrator details
 #------------------------------------------
-sim:program = benchmark
-sim:integrator = llg-heun
+
 
 #------------------------------------------
 # data output
 #------------------------------------------
 output:real-time
-output:magnetisation
-
-screen:time-steps
-screen:magnetisation-length
+output:electron-temperature
+output:magnetisation-length
+output:output-rate = 500
