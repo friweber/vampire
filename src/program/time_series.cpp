@@ -72,7 +72,7 @@ void time_series(){
 
    	// Vector to hold temperature data from file
 	std::vector<double> temperature_data;
-	std::ifstream file("temp.dat"); // File containing temperature data
+	std::ifstream file(std::getenv("TEMPERATURE_FILE")); // File containing temperature data
 	double temp_list;
 
 	// Read the temperature data from file
