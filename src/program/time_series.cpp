@@ -103,7 +103,7 @@ void time_series(){
 		}
 
 		// Integrate system
-		sim::integrate(1);
+		sim::integrate(5);
 
 		// Calculate magnetisation statistics
 		stats::mag_m();

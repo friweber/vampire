@@ -16,9 +16,9 @@ create:periodic-boundaries-z
 # System dimensions:
 #------------------------------------------
 dimensions:unit-cell-size = 3.524 !A
-dimensions:system-size-x = 10. !nm
-dimensions:system-size-y = 10. !nm
-dimensions:system-size-z = 10. !nm
+dimensions:system-size-x = 7. !nm
+dimensions:system-size-y = 7. !nm
+dimensions:system-size-z = 7. !nm
 
 #------------------------------------------
 # Material Files:
@@ -29,7 +29,8 @@ material:file = Ni.mat
 # Simulation attributes:
 #------------------------------------------
 sim:equilibration-time-steps=10000
-sim:total-time-steps=150000
+sim:equilibration-temperature=114.22
+sim:total-time-steps=230000
 sim:program=time-series
 sim:integrator=llg-heun
 sim:time-step=1.0e-16
@@ -46,4 +47,8 @@ sim:time-step=1.0e-16
 output:real-time
 output:electron-temperature
 output:magnetisation-length
-output:output-rate = 500
+output:output-rate = 2000
+
+screen:real-time
+screen:electron-temperature
+screen:magnetisation-length
