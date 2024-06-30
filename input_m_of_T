@@ -24,6 +24,7 @@ dimensions:system-size-z = 7.0 !nm
 # Material Files:
 #------------------------------------------
 material:file = Ni.mat
+material:alpha = 0.8
 
 #------------------------------------------
 # Simulation attributes:

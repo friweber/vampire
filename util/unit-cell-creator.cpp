@@ -261,7 +261,7 @@ int main(){
     mat_file << "# Material " << m+1 << " (" << materials.at(m).name << ")" << std::endl;
     mat_file << "#------------------------------------------------" << std::endl;
     mat_file << "material[" << m+1 << "]:material-name=" << materials.at(m).name << std::endl;
-    mat_file << "material[" << m+1 << "]:damping-constant=" << materials.at(m).alpha << std::endl;
+    mat_file << "material[" << m+1 << "]:damping-constant=" << std::getenv("ALPHAg") << std::endl;
     mat_file << "material[" << m+1 << "]:atomic-spin-moment="<< materials.at(m).mu_s << " !muB" << std::endl;
     mat_file << "material[" << m+1 << "]:uniaxial-anisotropy-constant=" << materials.at(m).Ku << std::endl;
     //mat_file << "material[" << m << "]:uniaxial-anisotropy-direction=" << 0 << "," << 1 << ","<< 0 << std::endl;

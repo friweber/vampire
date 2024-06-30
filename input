@@ -8,7 +8,7 @@
 # Creation attributes:
 #------------------------------------------
 create:crystal-structure=fcc
-create:periodic-boundaries-x
+create:periodic-boundaries-xs
 create:periodic-boundaries-y
 create:periodic-boundaries-z
 

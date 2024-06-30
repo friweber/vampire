@@ -29,7 +29,7 @@ namespace mp{
 materials_t::materials_t ():
 	name("material#n"),
 	element("Fe"),
-	alpha(1.0),
+	alpha(1),
 	mu_s_SI(1.72*9.27400915e-24),
 	magnetisation(0.0),
 	gamma_rel(1.0),
