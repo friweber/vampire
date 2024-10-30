@@ -146,7 +146,16 @@ void magnetization_statistic_t::calculate_magnetization(const std::vector<double
       magnetization[4*mask_id + 1] += sy[atom]*mm[atom];
       magnetization[4*mask_id + 2] += sz[atom]*mm[atom];
       magnetization[4*mask_id + 3] += mm[atom];
+
+      /*/ Print normalized magnetizations to check for issues
+      std::cout << "Normalized magnetization for Mask ID " << mask_id << ": "
+               << " Mx: " << magnetization[4*mask_id + 0]
+               << " My: " << magnetization[4*mask_id + 1]
+               << " Mz: " << magnetization[4*mask_id + 2]
+               << " Ml: " << magnetization[4*mask_id + 3] << std::endl;'*/
    }
+
+   
 
    // Reduce on all CPUS
    #ifdef MPICF

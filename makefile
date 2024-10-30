@@ -31,12 +31,20 @@ export LC_ALL=C
 LIBS=
 CUDALIBS=-L/usr/local/cuda/lib64/ -lcuda -lcudart
 
+CCC_CFLAGS += -I/srv/software/easybuild/software/FFTW/3.3.8-gompi-2020b/include
+GCC_CFLAGS += -I/srv/software/easybuild/software/FFTW/3.3.8-gompi-2020b/include
+ICC_CFLAGS += -I/srv/software/easybuild/software/FFTW/3.3.8-gompi-2020b/include
+LLVM_CFLAGS += -I/srv/software/easybuild/software/FFTW/3.3.8-gompi-2020b/include
+GCC_LDFLAGS += -L/srv/software/easybuild/software/FFTW/3.3.8-gompi-2020b/lib -lfftw3
+ICC_LDFLAGS += -L/srv/software/easybuild/software/FFTW/3.3.8-gompi-2020b/lib -lfftw3
+LLVM_LDFLAGS += -L/srv/software/easybuild/software/FFTW/3.3.8-gompi-2020b/lib -lfftw3
+
 # Debug Flags
 ICC_DBCFLAGS= -O0 -C -I./hdr -I./src/qvoronoi
 ICC_DBLFLAGS= -C -I./hdr -I./src/qvoronoi
 
-GCC_DBCFLAGS= -g -pg -fprofile-arcs -ftest-coverage -Wall -Wextra -O0 -fbounds-check -pedantic -std=c++0x -Wno-long-long -I./hdr -I./src/qvoronoi
-GCC_DBLFLAGS= -g -pg -fprofile-arcs -ftest-coverage -lstdc++ -std=c++0x -fbounds-check -I./hdr -I./src/qvoronoi
+GCC_DBCFLAGS= -g -pg -fprofile-arcs -ftest-coverage -Wall -Wextra -O0 -fbounds-check -pedantic -std=c++0x -Wno-long-long -I./hdr -I./src/qvoronoi -I/srv/software/easybuild/software/FFTW/3.3.8-gompi-2020b/include
+GCC_DBLFLAGS= -g -pg -fprofile-arcs -ftest-coverage -lstdc++ -std=c++0x -fbounds-check -I./hdr -I./src/qvoronoi -L/srv/software/easybuild/software/FFTW/3.3.8-gompi-2020b/lib -lfftw3
 
 PCC_DBCFLAGS= -O0 -I./hdr -I./src/qvoronoi
 PCC_DBLFLAGS= -O0 -I./hdr -I./src/qvoronoi
@@ -62,13 +70,11 @@ GCC_LDFLAGS= -lstdc++ -I./hdr -I./src/qvoronoi
 PCC_CFLAGS=-O2 -march=barcelona -ipa -I./hdr -I./src/qvoronoi
 PCC_LDFLAGS= -I./hdr -I./src/qvoronoi -O2 -march=barcelona -ipa
 
-
 IBM_CFLAGS=-O5 -qarch=450 -qtune=450 -I./hdr -I./src/qvoronoi
 IBM_LDFLAGS= -lstdc++ -I./hdr -I./src/qvoronoi -O5 -qarch=450 -qtune=450
 
 CRAY_CFLAGS= -O3 -hfp3 -I./hdr -I./src/qvoronoi
 CRAY_LDFLAGS= -I./hdr -I./src/qvoronoi
-
 
 # Save git commit in simple function
 GHASH:=$(shell git rev-parse HEAD)
@@ -181,7 +187,7 @@ all: serial parallel vdc
 
 # Serial Targets
 serial: $(OBJECTS)
-	$(GCC) $(GCC_LDFLAGS) $(LIBS) $(OBJECTS) -o $(EXECUTABLE)
+	$(GCC) $(GCC_LDFLAGS) -L/srv/software/easybuild/software/FFTW/3.3.8-gompi-2020b/lib -lfftw3 $(LIBS) $(OBJECTS) -o $(EXECUTABLE)
 
 $(OBJECTS): obj/%.o: src/%.cpp
 	$(GCC) -c -o $@ $(GCC_CFLAGS) $(OPTIONS) $<
@@ -205,7 +211,7 @@ $(IBM_OBJECTS): obj/%_ibm.o: src/%.cpp
 	$(IBM) -c -o $@ $(IBM_CFLAGS) $(OPTIONS) $<
 
 serial-debug: $(GCCDB_OBJECTS)
-	$(GCC) $(GCC_DBLFLAGS) $(LIBS) $(GCCDB_OBJECTS) -o $(EXECUTABLE)-debug
+	$(GCC) $(GCC_DBLFLAGS) $(LIBS) $(GCCDB_OBJECTS) -L/srv/software/easybuild/software/FFTW/3.3.8-gompi-2020b/lib -lfftw3 -o $(EXECUTABLE)-debug
 
 $(GCCDB_OBJECTS): obj/%_gdb.o: src/%.cpp
 	$(GCC) -c -o $@ $(GCC_DBCFLAGS) $(OPTIONS) $<
@@ -237,7 +243,7 @@ $(PCCDB_OBJECTS): obj/%_pdb.o: src/%.cpp
 # MPI Targets
 
 parallel: $(MPI_OBJECTS)
-	$(MPICC) $(GCC_LDFLAGS) $(LIBS) $(MPI_OBJECTS) -o $(PEXECUTABLE)
+	$(MPICC) $(GCC_LDFLAGS) $(LIBS) $(MPI_OBJECTS) -L/srv/software/easybuild/software/FFTW/3.3.8-gompi-2020b/lib -lfftw3 -o $(PEXECUTABLE)
 
 $(MPI_OBJECTS): obj/%_mpi.o: src/%.cpp
 	$(MPICC) -c -o $@ $(GCC_CFLAGS) $(OPTIONS) $<

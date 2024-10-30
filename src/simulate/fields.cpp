@@ -50,7 +50,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
-
+#include <fftw3.h>
 //========================
 //function prototypes
 //========================
@@ -63,6 +63,7 @@ void calculate_hamr_fields(const int,const int);
 void calculate_fmr_fields(const int,const int);
 void calculate_lagrange_fields(const int,const int);
 void calculate_full_spin_fields(const int start_index,const int end_index);
+std::vector<double> rotate_noise(const std::vector<double>& noise_vector, double phi, double theta);
 
 int calculate_spin_fields(const int start_index,const int end_index){
 
@@ -243,49 +244,104 @@ int calculate_applied_fields(const int start_index,const int end_index){
 
 }
 
-int calculate_thermal_fields(const int start_index,const int end_index){
-   ///======================================================
-   /// 		Subroutine to calculate thermal fields
-   ///
-   ///      Version 1.2 R Evans 12/08/2014
-   ///======================================================
+// int calculate_thermal_fields(const int start_index,const int end_index){
+//    ///======================================================
+//    /// 		Subroutine to calculate thermal fields
+//    ///
+//    ///      Version 1.2 R Evans 12/08/2014
+//    ///======================================================
 
-   // check calling of routine if error checking is activated
-   if(err::check==true){std::cout << "calculate_thermal_fields has been called" << std::endl;}
+//    // check calling of routine if error checking is activated
+//    if(err::check==true){std::cout << "calculate_thermal_fields has been called" << std::endl;}
 
-   // unroll sigma for speed
-   std::vector<double> sigma_prefactor(0);
-   sigma_prefactor.reserve(mp::material.size());
+//    // unroll sigma for speed
+//    std::vector<double> sigma_prefactor(0);
+//    sigma_prefactor.reserve(mp::material.size());
 
-   // Calculate material temperature (with optional rescaling)
-   for(unsigned int mat=0;mat<mp::material.size();mat++){
-      double temperature = sim::temperature;
-      // Check for localised temperature
-      if(sim::local_temperature) temperature = mp::material[mat].temperature;
-      // Calculate temperature rescaling
-      double alpha = mp::material[mat].temperature_rescaling_alpha;
-      double Tc = mp::material[mat].temperature_rescaling_Tc;
-      // if T<Tc T/Tc = (T/Tc)^alpha else T = T
-      double rescaled_temperature = temperature < Tc ? Tc*pow(temperature/Tc,alpha) : temperature;
-      double sqrt_T=sqrt(rescaled_temperature);
-      sigma_prefactor.push_back(sqrt_T*mp::material[mat].H_th_sigma);
-   }
+//    // Calculate material temperature (with optional rescaling)
+//    for(unsigned int mat=0;mat<mp::material.size();mat++){
+//       double temperature = sim::temperature;
+//       // Check for localised temperature
+//       if(sim::local_temperature) temperature = mp::material[mat].temperature;
+//       // Calculate temperature rescaling
+//       double alpha = mp::material[mat].temperature_rescaling_alpha;
+//       double Tc = mp::material[mat].temperature_rescaling_Tc;
+//       // if T<Tc T/Tc = (T/Tc)^alpha else T = T
+//       double rescaled_temperature = temperature < Tc ? Tc*pow(temperature/Tc,alpha) : temperature;
+//       double sqrt_T=sqrt(rescaled_temperature);
+//       sigma_prefactor.push_back(sqrt_T*mp::material[mat].H_th_sigma);
+//    }
 
-   generate (atoms::x_total_external_field_array.begin()+start_index,atoms::x_total_external_field_array.begin()+end_index, mtrandom::gaussian);
-   generate (atoms::y_total_external_field_array.begin()+start_index,atoms::y_total_external_field_array.begin()+end_index, mtrandom::gaussian);
-   generate (atoms::z_total_external_field_array.begin()+start_index,atoms::z_total_external_field_array.begin()+end_index, mtrandom::gaussian);
+//    generate (atoms::x_total_external_field_array.begin()+start_index,atoms::x_total_external_field_array.begin()+end_index, mtrandom::gaussian);
+//    generate (atoms::y_total_external_field_array.begin()+start_index,atoms::y_total_external_field_array.begin()+end_index, mtrandom::gaussian);
+//    generate (atoms::z_total_external_field_array.begin()+start_index,atoms::z_total_external_field_array.begin()+end_index, mtrandom::gaussian);
 
-   for(int atom=start_index;atom<end_index;atom++){
+//    for(int atom=start_index;atom<end_index;atom++){
 
-      const int imaterial=atoms::type_array[atom];
-      const double H_th_sigma = sigma_prefactor[imaterial];
+//       const int imaterial=atoms::type_array[atom];
+//       const double H_th_sigma = sigma_prefactor[imaterial];
 
-      atoms::x_total_external_field_array[atom] *= H_th_sigma;
-		atoms::y_total_external_field_array[atom] *= H_th_sigma;
-		atoms::z_total_external_field_array[atom] *= H_th_sigma;
-	}
+//       atoms::x_total_external_field_array[atom] *= H_th_sigma;
+// 		atoms::y_total_external_field_array[atom] *= H_th_sigma;
+// 		atoms::z_total_external_field_array[atom] *= H_th_sigma;
+// 	}
 
-   return EXIT_SUCCESS;
+//    return EXIT_SUCCESS;
+// }
+
+int calculate_thermal_fields(const int start_index, const int end_index) {
+    ///======================================================
+    /// 		Subroutine to calculate thermal fields
+    ///
+    ///      Version 1.2 R Evans 12/08/2014
+    ///======================================================
+
+    // Check calling of routine if error checking is activated
+    if (err::check == true) { std::cout << "calculate_thermal_fields has been called" << std::endl; }
+
+    // Unroll sigma for speed
+    std::vector<double> sigma_prefactor(0);
+    sigma_prefactor.reserve(mp::material.size());
+
+    // Calculate material temperature (with optional rescaling)
+    for (unsigned int mat = 0; mat < mp::material.size(); mat++) {
+        double temperature = sim::temperature;
+        // Check for localised temperature
+        if (sim::local_temperature) temperature = mp::material[mat].temperature;
+        // Calculate temperature rescaling
+        double alpha = mp::material[mat].temperature_rescaling_alpha;
+        double Tc = mp::material[mat].temperature_rescaling_Tc;
+        // if T < Tc, T/Tc = (T/Tc)^alpha else T = T
+        double rescaled_temperature = temperature < Tc ? Tc * pow(temperature / Tc, alpha) : temperature;
+        double sqrt_T = sqrt(rescaled_temperature);
+        sigma_prefactor.push_back(sqrt_T * mp::material[mat].H_th_sigma);
+    }
+
+    // Apply noise and rotations to the thermal fields
+    for (int atom = start_index; atom < end_index; atom++) {
+        const int imaterial = atoms::type_array[atom];
+        const double H_th_sigma = sigma_prefactor[imaterial];
+
+        // Get the indices for the noise samples
+        int idx_x = atoms::atom_idx_x[atom];
+        int idx_y = atoms::atom_idx_y[atom];
+        int idx_z = atoms::atom_idx_z[atom];
+		
+        // Get the precomputed noise sample for this atom
+        double noise_x = atoms::noise_field[idx_x][atoms::noise_index];
+        double noise_y = atoms::noise_field[idx_y][atoms::noise_index];
+        double noise_z = atoms::noise_field[idx_z][atoms::noise_index];
+
+	
+		double C = 1.0;
+        atoms::x_total_external_field_array[atom] = noise_x * C;
+        atoms::y_total_external_field_array[atom] = noise_y * C;
+        atoms::z_total_external_field_array[atom] = noise_z * C;
+    }
+
+	atoms::noise_index++;
+
+    return 0;
 }
 
 int calculate_dipolar_fields(const int start_index,const int end_index){
@@ -561,4 +617,46 @@ void calculate_full_spin_fields(const int start_index,const int end_index){
 
 	return;
 
+}
+
+// Function to rotate a noise vector in 3D space
+std::vector<double> rotate_noise(const std::vector<double>& noise_vector, double phi, double theta) {
+	// Ensure the noise_vector has three components
+	if (noise_vector.size() != 3) {
+		throw std::invalid_argument("noise_vector must have exactly three components.");
+	}
+
+	// Calculate the sine and cosine of the angles
+	double cos_phi = std::cos(phi);
+	double sin_phi = std::sin(phi);
+	double cos_theta = std::cos(theta);
+	double sin_theta = std::sin(theta);
+
+	// Rotation matrix R_z(phi)
+	double Rz[3][3] = {
+		{ cos_phi, -sin_phi, 0 },
+		{ sin_phi,  cos_phi, 0 },
+		{ 0,       0,       1 }
+	};
+
+	// Rotation matrix R_y(theta)
+	double Ry[3][3] = {
+		{ cos_theta, 0, sin_theta },
+		{ 0,         1, 0 },
+		{ -sin_theta, 0, cos_theta }
+	};
+
+	// Apply Rz(phi) to the noise_vector
+	std::vector<double> temp_vector(3);
+	temp_vector[0] = Rz[0][0] * noise_vector[0] + Rz[0][1] * noise_vector[1] + Rz[0][2] * noise_vector[2];
+	temp_vector[1] = Rz[1][0] * noise_vector[0] + Rz[1][1] * noise_vector[1] + Rz[1][2] * noise_vector[2];
+	temp_vector[2] = Rz[2][0] * noise_vector[0] + Rz[2][1] * noise_vector[1] + Rz[2][2] * noise_vector[2];
+
+	// Apply Ry(theta) to the result of the previous rotation
+	std::vector<double> rotated_noise(3);
+	rotated_noise[0] = Ry[0][0] * temp_vector[0] + Ry[0][1] * temp_vector[1] + Ry[0][2] * temp_vector[2];
+	rotated_noise[1] = Ry[1][0] * temp_vector[0] + Ry[1][1] * temp_vector[1] + Ry[1][2] * temp_vector[2];
+	rotated_noise[2] = Ry[2][0] * temp_vector[0] + Ry[2][1] * temp_vector[1] + Ry[2][2] * temp_vector[2];
+
+	return rotated_noise;
 }
