@@ -1,0 +1,30 @@
+#!/bin/bash
+
+#SBATCH --partition=all
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=340G
+#SBATCH --time=0-02:00  # Specify nodes n-hpc-cb5 and n-hpc-ca2
+#SBATCH --chdir=/work/friweber/Spicy_Ni_pure_dyn
+#SBATCH --output=slurm-%A_%a.out
+#SBATCH --array=0-0
+module load numlib/FFTW
+module load mpi/OpenMPI
+
+# Define the temperature range (0 to 5)
+TEMP_MIN=218.97
+TEMP_MAX=550
+# Calculate the increment using awk
+TEMP_INC=10
+# Calculate the temperature corresponding to the current task ID using awk
+TEMP=$(awk "BEGIN {printf \"%.2f\", $TEMP_MIN + $SLURM_ARRAY_TASK_ID * $TEMP_INC}")
+# Set the environment variable for temperature
+export SIM_TEMPERATURE=$TEMP
+
+# Set the output file name
+export OUTPUT_FILE="Ni_dyn_fprec_qnz_${TEMP}.dat"
+
+# Run the program and redirect output to the output file
+./vampire-serial
+#mpirun -np 16 -oversubscribe ./vampire-parallel
