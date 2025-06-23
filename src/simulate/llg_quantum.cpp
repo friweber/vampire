@@ -406,7 +406,9 @@ namespace sim{
       static thread_local std::mt19937 gen(rd());
       std::normal_distribution<> dist(0.0, 1.0 / std::sqrt(dt_fine));
 
-      LLGQ_arrays::coarse_noise_field.resize(realizations*n_coarse);
+      const long long total_elements = static_cast<long long>(realizations) * static_cast<long long>(n_coarse);
+      const size_t safe_size = static_cast<size_t>(total_elements);
+      LLGQ_arrays::coarse_noise_field.resize(safe_size);
 
       // Progress bar setup
       const int bar_width = 50;
