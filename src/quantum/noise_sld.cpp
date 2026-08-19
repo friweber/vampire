@@ -55,6 +55,7 @@
 #include "constants.hpp"
 #include "errors.hpp"
 #include "material.hpp"
+#include "program.hpp"
 #include "quantum.hpp"
 #include "random.hpp"
 #include "sim.hpp"
@@ -414,6 +415,24 @@ static bool use_preallocated_noise = true;
 
          // Detect FFT variants
          const bool use_fft = (kind == kind_t::quantum_fft || kind == kind_t::quantum_no_zero_fft);
+
+         // The pre-generated trace is shaped once, at the temperature holding
+         // when this runs, and cannot follow a temperature that moves later.
+         // The thermostat path (llg-quantum) refuses such programs in
+         // supported_program(); this path had no equivalent check, so a laser
+         // pulse combined with an -fft noise type ran the whole simulation on
+         // noise for the starting temperature without saying so.
+         if (use_fft && dynamic_temperature_program()) {
+            std::cerr << "Error: pre-generated (FFT) quantum noise cannot be used with a "
+                      << "program that varies the temperature.\n"
+                      << "  Its spectrum is fixed at the temperature holding when the noise "
+                      << "is generated,\n  so the run would silently use the wrong "
+                      << "temperature throughout.\n"
+                      << "  Use the on-the-fly generator instead: drop the '-fft' suffix "
+                      << "from the noise type\n  (quantum-fft -> quantum, "
+                      << "quantum-no-zero-fft -> quantum-no-zero)." << std::endl;
+            err::vexit();
+         }
          const bool no_zero = (kind == kind_t::quantum_no_zero || kind == kind_t::quantum_no_zero_fft);
 
          // Map SLD kind -> internal thermostat noise_type

@@ -354,6 +354,22 @@ namespace quantum{
    }
 
    //========================================================================
+   // Programs that move sim::temperature while the simulation runs.
+   //========================================================================
+   bool internal::dynamic_temperature_program(){
+      switch (program::program) {
+         case  5:   // field cool
+         case  6:   // laser / temperature pulse
+         case  7:   // HAMR
+         case 13:   // localised temperature pulse
+         case 16:   // local field cool
+            return true;
+         default:
+            return false;
+      }
+   }
+
+   //========================================================================
    // Check if the selected simulation program is supported by the quantum
    // thermostat module's currently selected llg_method, and report the
    // total simulation time-step count.
@@ -380,7 +396,6 @@ namespace quantum{
          case  2: total_simulation_time = et + lt; return true;  // hysteresis
          case  3: total_simulation_time = et + lt; return true;  // static hysteresis
          case  4: total_simulation_time = et + lt; return true;  // Curie temperature
-         case  6: total_simulation_time = et + tt; return true;  // temperature pulse
          case 11: total_simulation_time = et + tt; return true;  // LaGrange multiplier
          case 12: total_simulation_time = et + lt; return true;  // partial hysteresis
          case 14: total_simulation_time = et + tt; return true;  // effective damping
@@ -393,6 +408,7 @@ namespace quantum{
 
          // --- Dynamic-T programs: HO only (FFT pipeline can't track runtime T) ---
          case  5: total_simulation_time = et + tt; return ho;    // field cool
+         case  6: total_simulation_time = et + tt; return ho;    // laser / temperature pulse
          case  7: total_simulation_time = et + tt; return ho;    // HAMR
          case 13: total_simulation_time = et + tt; return ho;    // localised T pulse
          case 16: total_simulation_time = et + tt; return ho;    // local field cool

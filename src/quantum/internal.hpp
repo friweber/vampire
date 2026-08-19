@@ -78,6 +78,21 @@ namespace quantum{
       // runtime (temperature pulse, laser pulse, …) get correct dynamic-T
       // behaviour only because of the per-call reading of sim::temperature.
       //=====================================================================
+      //=====================================================================
+      // True for programs that vary sim::temperature during the run.
+      //
+      // The pre-generated (FFT) noise is shaped once, from the temperature at
+      // initialisation, and cannot follow a temperature that moves afterwards.
+      // Every entry point that can select an FFT generator has to consult this
+      // and refuse, or the run silently produces noise for the wrong
+      // temperature for its entire duration.
+      //
+      //   5  field cool          6  laser / temperature pulse
+      //   7  HAMR               13  localised temperature pulse
+      //  16  local field cool
+      //=====================================================================
+      bool dynamic_temperature_program();
+
       inline double scale_temperature(const double T_K) {
          return T_K * constants::kB / (constants::hbar * constants::gyromagnetic_ratio);
       }
