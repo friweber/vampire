@@ -537,6 +537,7 @@ namespace quantum{
       extern std::vector<double> sld_fft_spin_y;
       extern std::vector<double> sld_fft_spin_z;
       extern uint64_t sld_fft_step_index;          // current fine step
+      extern bool     sld_fft_started;             // false until the first generate()
       extern uint64_t sld_fft_n_fine;              // total steps pre-generated
       extern int      sld_fft_num_atoms;            // atoms used at generation time
 

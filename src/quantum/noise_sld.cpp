@@ -53,6 +53,7 @@
 // Vampire headers
 #include "atoms.hpp"
 #include "constants.hpp"
+#include "errors.hpp"
 #include "material.hpp"
 #include "quantum.hpp"
 #include "random.hpp"
@@ -314,14 +315,35 @@ static bool use_preallocated_noise = true;
       fftw_plan fwd = fftw_plan_dft_r2c_1d(nc, in,  out, FFTW_ESTIMATE);
       fftw_plan bwd = fftw_plan_dft_c2r_1d(nc, out, in,  FFTW_ESTIMATE);
 
-      // sqrt(PSD factor): coth or coth-1, DC bin = 0 (no mean shift)
+      // sqrt of the target PSD, DC bin = 0 (no mean shift).
+      //
+      // The targets are  omega*coth(omega/2T)  and  omega*(coth(omega/2T)-1),
+      // NOT coth and coth-1: the leading factor of omega is part of the
+      // spectrum, not a normalisation. Without it the generated noise falls as
+      // 1/omega relative to the target, which at 300 K leaves only ~3% of the
+      // correct power over 0.1-3 T_scaled and breaks the classical DC limit
+      // that both spectra must satisfy.
+      //
+      // With the factor restored both targets tend to the classical plateau
+      // 2*T_scaled as omega -> 0, matching the white-noise amplitude exactly,
+      // and neither diverges at the origin.
+      //
+      // coth(x)-1 is evaluated as 2/expm1(2x): the literal difference loses all
+      // precision for x > ~18, where the true value is ~1e-16.
       std::vector<double> sqrt_psd(nc/2 + 1, 0.0);
       for (int k = 1; k <= nc/2; ++k) {
          const double omega = 2.0 * M_PI * k / (nc * dt);
          const double x     = omega / (2.0 * T_scaled);
-         const double coth  = (std::fabs(x) < 1e-10) ? 1.0/x : 1.0/std::tanh(x);
-         const double psd   = no_zero ? std::max(0.0, coth - 1.0) : coth;
-         sqrt_psd[k] = std::sqrt(psd);
+         double psd;
+         if (no_zero) {
+            // omega * (coth(x) - 1) = 2*omega / (exp(2x) - 1)
+            psd = (x > 350.0) ? 0.0 : 2.0 * omega / std::expm1(2.0 * x);
+         } else {
+            // omega * coth(x), with the omega/x -> 2T limit as x -> 0
+            const double coth = (std::fabs(x) < 1e-10) ? 1.0 / x : 1.0 / std::tanh(x);
+            psd = omega * coth;
+         }
+         sqrt_psd[k] = std::sqrt(std::max(0.0, psd));
       }
 
       // white-noise sigma = 1/sqrt(dt); final_scale = amp / n_fine * sigma
@@ -459,10 +481,11 @@ static bool use_preallocated_noise = true;
          const size_t st_size  = static_cast<size_t>(num_atoms) * n_bath_modes;
 
          // --- Spin bath setup ---
-         // HO kinds: allocate on-the-fly OU bath.
-         // FFT kinds: pre-generate all spin noise now; skip the OU spin bath.
+         // HO kinds: allocate the on-the-fly OU bath now.
+         // FFT kinds: deferred until after the pre-generation attempt below,
+         // because that attempt may fall back to HO (see there).
          if (!use_fft) {
-            if (noise_type == quantum_zero)
+             if (noise_type == quantum_zero)
                setup_orn_uhl(num_atoms);
             else
                setup_log_bath_opt(num_atoms);
@@ -525,13 +548,24 @@ static bool use_preallocated_noise = true;
          // --- FFT spin noise pre-generation ---
          if (use_fft) {
             if (n_fine == 0) {
-               std::cerr << "Warning: spin-lattice:noise-type = quantum-fft requested "
-                         << "but total step count is 0. Noise will be zero.\n";
+               std::cerr << "Warning: quantum FFT noise requested but the total step "
+                         << "count is 0; falling back to on-the-fly generation.\n";
             } else {
                std::vector<double> H_th_sigma_vec(static_cast<int>(mats.size()));
                for (int m = 0; m < static_cast<int>(mats.size()); ++m)
                   H_th_sigma_vec[m] = mats[m].H_th_sigma;
                generate_sld_spin_fft(num_atoms, n_fine, no_zero, H_th_sigma_vec);
+            }
+
+            // generate_sld_spin_fft() leaves sld_fft_n_fine == 0 when it could
+            // not allocate (8 GiB guard) or when FFTW is not compiled in, and
+            // announces a fallback to on-the-fly generation. That fallback used
+            // to be a lie: the OU bath was never allocated, so the next
+            // generate() wrote coefficients into zero-length vectors. Allocate
+            // it here so the fallback is real.
+            if (sld_fft_n_fine == 0) {
+               if (noise_type == quantum_zero) setup_orn_uhl(num_atoms);
+               else                            setup_log_bath_opt(num_atoms);
             }
          }
 
@@ -562,7 +596,27 @@ static bool use_preallocated_noise = true;
          // FFT kinds: advance the step pointer; all spin noise already pre-baked.
          // Phonon noise is always HO — generate it on the fly as usual.
          if (sld_fft_n_fine > 0) {
-            ++sld_fft_step_index;
+            // Advance only from the second call onward, so that step 0 of the
+            // simulation reads pre-generated sample 0 rather than sample 1.
+            if (sld_fft_started) ++sld_fft_step_index;
+            else                 sld_fft_started = true;
+
+            // Running past the pre-generated trace used to fall through to the
+            // never-written qn_*_array, i.e. silently inject ZERO thermal noise
+            // for the remainder of the run. Fail loudly instead: the trace is
+            // sized from sim::equilibration_time + sim::total_time, so an
+            // overrun means the program takes more steps than that.
+            if (sld_fft_step_index >= sld_fft_n_fine) {
+               std::cerr << "Error: quantum FFT noise exhausted after "
+                         << sld_fft_n_fine << " steps.\n"
+                         << "  The pre-generated trace is sized from "
+                         << "sim:equilibration-time-steps + sim:total-time-steps.\n"
+                         << "  Either increase those to cover the whole run, or use the\n"
+                         << "  on-the-fly generator (quantum:heun-noise-type = quantum "
+                         << "or quantum-no-zero)." << std::endl;
+               err::vexit();
+            }
+
             refresh_quantum_noise_phonon_for_T();
             const double dt_ps = mp::dt_SI * 1e12;
             for (int i = 0; i < num_atoms; ++i)
@@ -587,8 +641,9 @@ static bool use_preallocated_noise = true;
       //----------------------------------------------------------------------
       double spin(int atom, int component) {
          using namespace quantum::internal;
-         // FFT path: read from pre-baked array
-         if (sld_fft_n_fine > 0 && sld_fft_step_index < sld_fft_n_fine) {
+         // FFT path: read from pre-baked array. generate() guarantees the
+         // index is in range, so this is not a silent fallback any more.
+         if (sld_fft_n_fine > 0) {
             const size_t idx = static_cast<size_t>(atom) * sld_fft_n_fine + sld_fft_step_index;
             if (component == 0) return sld_fft_spin_x[idx];
             if (component == 1) return sld_fft_spin_y[idx];

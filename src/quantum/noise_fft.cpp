@@ -405,7 +405,11 @@ namespace quantum{
 
          outfile << std::scientific << std::setprecision(12);
          for (int k = 0; k < nc; ++k) {
-            const double t = (window_start_fine + static_cast<double>(k) * stored_M) * stored_dt_fine;
+            // stored_dt_fine is mp::dt, the REDUCED step (dt_SI * gamma).
+            // Convert back to seconds so the exported axis matches its header
+            // and a derived PSD lands on a real frequency scale.
+            const double t = (window_start_fine + static_cast<double>(k) * stored_M)
+                             * stored_dt_fine / mp::gamma_SI;
             outfile << t
                     << " " << coarse_noise_field[ix + k]
                     << " " << coarse_noise_field[iy + k]

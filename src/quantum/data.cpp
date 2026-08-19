@@ -234,6 +234,7 @@ namespace quantum{
       std::vector<double> sld_fft_spin_y;
       std::vector<double> sld_fft_spin_z;
       uint64_t sld_fft_step_index = 0;
+      bool     sld_fft_started    = false;
       uint64_t sld_fft_n_fine     = 0;
       int      sld_fft_num_atoms  = 0;
 

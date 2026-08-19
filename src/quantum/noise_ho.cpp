@@ -814,7 +814,7 @@ static bool use_preallocated_noise = true;
          out << "# HO quantum noise export — auxiliary oscillator q for atom 0\n";
          out << "# noise_type: " << noise_type_name(noise_type) << "\n";
          out << "# method:     " << llg_method_short_name(llg_method) << "\n";
-         out << "# dt:         " << mp::dt << " s\n";
+         out << "# dt:         " << mp::dt_SI << " s\n";
          out << "# Column 1: time (s)\n";
          out << "# Column 2: q_x (atom 0)\n";
          out << "# Column 3: q_y (atom 0)\n";
@@ -822,7 +822,10 @@ static bool use_preallocated_noise = true;
          noise_export_header_written = true;
       }
 
-      const double t = static_cast<double>(sim::time) * mp::dt;
+      // mp::dt is the REDUCED step (dt_SI * gamma), so it must not be used to
+      // build a time axis in seconds -- doing so scales every frequency of a
+      // derived PSD by gamma = 1.76e11.
+      const double t = static_cast<double>(sim::time) * mp::dt_SI;
       out << t << " "
           << q_x_array[0] << " "
           << q_y_array[0] << " "
