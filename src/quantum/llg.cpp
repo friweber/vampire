@@ -9,21 +9,17 @@
 //
 //------------------------------------------------------------------------------
 //
+//   Top-level LLG dispatcher for the quantum thermostat module.
+//
+//   Selects the appropriate time stepper based on the chosen noise method
+//   (FFT or HO) and the compilation mode (serial / MPI / CUDA).
+//
+//------------------------------------------------------------------------------
 
-// Standard Libraries
-#include <cmath>
-#include <cstdlib>
-#include <iostream>
-#include <vector>
-
-// Vampire Header files
-#include "atoms.hpp"
-#include "errors.hpp"
-#include "sim.hpp"
+// Vampire headers
 #include "quantum.hpp"
-#include "material.hpp"
-#include "vio.hpp"
 
+// Module headers
 #include "internal.hpp"
 
 #ifdef CUDA
@@ -32,46 +28,38 @@
 
 namespace quantum{
 
-   namespace internal{
-
-   } // end of internal namespace
-
-   //---------------------------------------------------------------------------
-   // LLG Wrapper Function
-   //---------------------------------------------------------------------------
+   //------------------------------------------------------------------------
+   // Public LLG dispatcher
+   //------------------------------------------------------------------------
    void llg(){
 
-      // Call LLG method based on integration type
       #ifdef MPICF
          // MPI parallel version
-         if(internal::llg_method == internal::llg_fft){
+         if (internal::llg_method == internal::llg_fft) {
             internal::llg_FFT_mpi();
          }
-         else if(internal::llg_method == internal::llg_ho){
+         else if (internal::llg_method == internal::llg_ho) {
             internal::llg_HO_mpi();
          }
       #else
-         // Serial version
          #ifdef CUDA
             // CUDA accelerated version
-            if(internal::llg_method == internal::llg_ho){
+            if (internal::llg_method == internal::llg_ho) {
                internal::cuda_ho::llg_HO_step();
             }
-            else if(internal::llg_method == internal::llg_fft){
+            else if (internal::llg_method == internal::llg_fft) {
                internal::llg_FFT();
             }
          #else
             // CPU serial version
-            if(internal::llg_method == internal::llg_fft){
+            if (internal::llg_method == internal::llg_fft) {
                internal::llg_FFT();
             }
-            else if(internal::llg_method == internal::llg_ho){
+            else if (internal::llg_method == internal::llg_ho) {
                internal::llg_HO();
             }
          #endif
       #endif
-
-      return;
    }
 
 } // end of quantum namespace

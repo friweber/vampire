@@ -20,12 +20,13 @@
 //---------------------------------------------------------------------
 
 // C++ standard library headers
+#include <string>
 #include <vector>
 
 // Vampire headers
 #include "sld.hpp"
 
-// sld module headers
+// sld module headers (pulls in quantum/internal.hpp)
 #include "internal.hpp"
 
 
@@ -118,6 +119,34 @@ namespace sld{
 
       extern bool enabled; // bool to enable module
       extern std::vector<sld::internal::mp_t> mp; // array of material properties
+
+      //---------------------------------------------------------------------
+      // Quantum noise type selection for both spin and phonon subsystems.
+      // Default: sld_classical — backward compatible with classical SLD.
+      // Set via input keyword:  spin-lattice:quantum-noise = [classical|quantum|quantum-no-zero]
+      //---------------------------------------------------------------------
+      enum sld_noise_t {
+         sld_classical,           // classical white Gaussian noise (default)
+         sld_quantum,             // quantum coth via HO (on-the-fly)
+         sld_quantum_no_zero,     // quantum (coth-1) via HO (on-the-fly)
+         sld_quantum_fft,         // quantum coth via FFT (pre-generated)
+         sld_quantum_no_zero_fft  // quantum (coth-1) via FFT (pre-generated)
+      };
+      extern sld_noise_t quantum_noise_type;
+
+      //---------------------------------------------------------------------
+      // Diagnostic noise export. When enabled, the integrator appends the
+      // actual injected noise (spin field added to H_eff and lattice/force
+      // noise added to the velocity update) for one atom / one component
+      // (x) once per Suzuki-Trotter step to a file. Columns:
+      //    time [s]   spin_x   lattice_x
+      // Set via:  spin-lattice:export-noise [= filename]
+      //           spin-lattice:export-noise-atom = <int>
+      //---------------------------------------------------------------------
+      extern bool export_noise;                  // enable noise.dat export
+      extern std::string export_noise_filename;  // output file (default "noise.dat")
+      extern int  export_noise_atom;             // atom index to sample (default 0)
+      void write_noise_sample(double t, double spin_x, double lattice_x);
 
       extern double r_cut_pot; // mechanical potential cutoff
       extern double r_cut_fields; // exchange/coupling cutoff

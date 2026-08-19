@@ -19,6 +19,8 @@
 #include "neighbours.hpp"
 #include "material.hpp"
 #include "constants.hpp"
+#include "quantum.hpp"
+#include "sim.hpp"
 
 // sld module headers
 #include "internal.hpp"
@@ -32,6 +34,11 @@ namespace sld{
 
       // check for sld module being enabled
       if(!sld::enabled) return;
+
+      // Ensure mp has at least num_materials entries (may be absent when only
+      // spin-lattice:noise-type or spin-lattice:export-noise was set).
+      if (sld::internal::mp.size() < static_cast<size_t>(mp::num_materials))
+         sld::internal::mp.resize(mp::num_materials);
 
       std::cout<<"Input parameters for Spin-lattice dynamics simulations:"<<std::endl;
       std::cout<<"*******************************************************"<<std::endl;
@@ -49,6 +56,51 @@ namespace sld{
 
     //initialise exchange, coupling parameters
      sld::internal::initialise_sld_parameters();
+
+     // Initialise quantum noise if enabled. The sld module talks to the quantum
+     // module only through the public quantum::sld_noise API: we map the sld noise
+     // kind and hand over the per-material parameters the quantum bath needs to
+     // derive its amplitudes (so the quantum module never includes sld internals
+     // and an sld quantum run needs no quantum-lorentzian-* inputs).
+     if (sld::internal::quantum_noise_type != sld::internal::sld_classical) {
+
+        quantum::sld_noise::kind_t kind;
+        switch (sld::internal::quantum_noise_type) {
+           case sld::internal::sld_quantum:
+              kind = quantum::sld_noise::kind_t::quantum;          break;
+           case sld::internal::sld_quantum_no_zero:
+              kind = quantum::sld_noise::kind_t::quantum_no_zero;  break;
+           case sld::internal::sld_quantum_fft:
+              kind = quantum::sld_noise::kind_t::quantum_fft;      break;
+           case sld::internal::sld_quantum_no_zero_fft:
+              kind = quantum::sld_noise::kind_t::quantum_no_zero_fft; break;
+           default:
+              kind = quantum::sld_noise::kind_t::quantum;          break;
+        }
+
+        // For FFT variants pre-generate the full trajectory noise.
+        const bool use_fft = (kind == quantum::sld_noise::kind_t::quantum_fft ||
+                              kind == quantum::sld_noise::kind_t::quantum_no_zero_fft);
+        const uint64_t n_fine = use_fft
+           ? (sim::equilibration_time + sim::total_time)
+           : 0;
+
+        std::vector<quantum::sld_noise::material_params> mats(mp::num_materials);
+        for (int mat = 0; mat < mp::num_materials; ++mat) {
+           mats[mat].mass       = sld::internal::mp[mat].mass.get();
+           mats[mat].damp_lat   = sld::internal::mp[mat].damp_lat.get();
+           mats[mat].V0         = sld::internal::mp[mat].V0.get();
+           mats[mat].H_th_sigma = mp::material[mat].H_th_sigma;
+        }
+
+        quantum::sld_noise::initialize(kind, atoms::num_atoms, mats, n_fine);
+
+        if (sld::internal::export_noise) {
+           quantum::sld_noise::enable_spin_noise_export(
+              sld::internal::export_noise_filename,
+              sld::internal::export_noise_atom);
+        }
+     }
 
      //for the morse potential:
 

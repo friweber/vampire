@@ -1,0 +1,49 @@
+#------------------------------------------
+# Ni ASD — quantum-no-zero noise (coth - 1, zero-point subtracted)
+# quantum:heun-noise-type = quantum-no-zero
+# Uses log-spaced OU bath with optimised lambda range.
+# Spectral weight: coth(omega/2T) - 1 — thermal fluctuations only.
+# At T -> 0 noise -> 0 (no spurious heating from zero-point term).
+#------------------------------------------
+
+#------------------------------------------
+# Creation
+#------------------------------------------
+create:crystal-structure=fcc
+create:periodic-boundaries-x
+create:periodic-boundaries-y
+create:periodic-boundaries-z
+
+#------------------------------------------
+# System Dimensions
+#------------------------------------------
+dimensions:unit-cell-size = 3.524 !A
+dimensions:system-size-x  = 4.0   !nm
+dimensions:system-size-y  = 4.0   !nm
+dimensions:system-size-z  = 4.0   !nm
+
+#------------------------------------------
+# Material
+#------------------------------------------
+material:file=Ni_ASD.mat
+
+#------------------------------------------
+# Simulation
+#------------------------------------------
+sim:integrator               = llg-heun-quantum
+quantum:heun-noise-type      = quantum-no-zero
+quantum:bath-modes           = 30
+
+sim:program                  = time-series
+sim:time-step                = 1e-15
+sim:total-time-steps         = 100000
+sim:equilibration-time-steps = 10000
+sim:temperature              = 300
+
+#------------------------------------------
+# Output
+#------------------------------------------
+output:output-rate           = 100
+output:real-time
+output:mean-magnetisation-length
+output:magnetisation

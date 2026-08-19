@@ -8,11 +8,11 @@
 # Optional libraries
 #----------------------------------------------------------------------
 # Defaults are no extras (for easy compilation)
-LIBS=
-FFTW=
+#LIBS=
+#FFTW=
 
-#LIBS= -lm -lfftw3 -L/opt/local/lib/
-#FFTW= -DFFT -I/opt/local/include/
+LIBS= -lm -lfftw3 -L/opt/local/lib/
+FFTW= -DFFT -I/opt/local/include/
 # Uncomment these to add FFTW for spin waves, quantum thermostat and FFT dipole
 
 # Add the CUDA libraries
@@ -100,6 +100,7 @@ obj/simulate/energy.o \
 obj/simulate/fields.o \
 obj/simulate/LLB.o \
 obj/simulate/LLGHeun.o \
+obj/simulate/LLGHeun_quantum.o \
 obj/simulate/LLGMidpoint.o \
 obj/simulate/sim.o \
 obj/simulate/standard_programs.o \
@@ -188,8 +189,17 @@ all: serial parallel vdc
 serial: $(OBJECTS)
 	$(GCC) $(GCC_LDFLAGS)  $(OBJECTS) $(LIBS) -o $(EXECUTABLE)
 
-$(OBJECTS): obj/%.o: src/%.cpp
+$(filter-out $(addprefix obj/quantum/,$(quantum_objects)),$(OBJECTS)): obj/%.o: src/%.cpp
 	$(GCC) -c -o $@ $(GCC_CFLAGS) $(OPTIONS) $<
+
+# Quantum module: -std=c++17 is required for if constexpr in the noise generators.
+# Note: -march=native is intentionally omitted — AVX2 frequency throttling on Intel
+# CPUs outweighs any vectorisation gain when the Ziggurat RNG (non-vectorisable) dominates.
+$(addprefix obj/quantum/,$(quantum_objects)): obj/quantum/%.o: src/quantum/%.cpp
+	$(GCC) -c -o $@ $(GCC_CFLAGS) -std=c++17 $(OPTIONS) $<
+
+$(addprefix obj/quantum/,$(quantum_objects:.o=_par.o)): obj/quantum/%_par.o: src/quantum/%.cpp
+	$(MPICC) -c -o $@ $(GCC_CFLAGS) -std=c++17 $(OPTIONS) $<
 
 serial-intel: $(ICC_OBJECTS)
 	$(ICC) $(ICC_LDFLAGS) $(LIBS) $(ICC_OBJECTS) -o $(EXECUTABLE)-intel
@@ -210,7 +220,7 @@ $(IBM_OBJECTS): obj/%_ibm.o: src/%.cpp
 	$(IBM) -c -o $@ $(IBM_CFLAGS) $(OPTIONS) $<
 
 serial-debug: $(GCCDB_OBJECTS)
-	$(GCC) $(GCC_DBLFLAGS) $(LIBS) $(GCCDB_OBJECTS) -o $(EXECUTABLE)-debug
+	$(GCC) $(GCC_DBLFLAGS) $(GCCDB_OBJECTS) $(LIBS) -o $(EXECUTABLE)-debug
 
 $(GCCDB_OBJECTS): obj/%_gdb.o: src/%.cpp
 	$(GCC) -c -o $@ $(GCC_DBCFLAGS) $(OPTIONS) $<
@@ -244,7 +254,7 @@ $(PCCDB_OBJECTS): obj/%_pdb.o: src/%.cpp
 parallel: $(MPI_OBJECTS)
 	$(MPICC) $(GCC_LDFLAGS) $(MPI_OBJECTS) $(LIBS) -o $(PEXECUTABLE)
 
-$(MPI_OBJECTS): obj/%_par.o: src/%.cpp
+$(filter-out $(addprefix obj/quantum/,$(quantum_objects:.o=_par.o)),$(MPI_OBJECTS)): obj/%_par.o: src/%.cpp
 	$(MPICC) -c -o $@ $(GCC_CFLAGS) $(OPTIONS) $<
 
 parallel-intel: $(MPI_ICC_OBJECTS)

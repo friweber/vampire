@@ -112,6 +112,52 @@ namespace sld{
          return true;
      }
 
+     test = "noise-type";
+     if( word == test ){
+         if( value == "classical" ){
+            sld::internal::quantum_noise_type = sld::internal::sld_classical;
+            return true;
+         }
+         if( value == "quantum" ){
+            sld::internal::quantum_noise_type = sld::internal::sld_quantum;
+            return true;
+         }
+         if( value == "quantum-no-zero" ){
+            sld::internal::quantum_noise_type = sld::internal::sld_quantum_no_zero;
+            return true;
+         }
+         if( value == "quantum-fft" ){
+            sld::internal::quantum_noise_type = sld::internal::sld_quantum_fft;
+            return true;
+         }
+         if( value == "quantum-no-zero-fft" ){
+            sld::internal::quantum_noise_type = sld::internal::sld_quantum_no_zero_fft;
+            return true;
+         }
+     }
+
+     // Diagnostic: export the injected noise (spin + lattice, one atom/x) per step.
+     // Bare keyword or true/1/yes -> default filename; otherwise value is the filename.
+     test = "export-noise";
+     if( word == test ){
+        sld::internal::export_noise = true;
+        const bool is_bool_true =
+           value == "true" || value == "1" || value == "yes" ||
+           value == "on"   || value == "enable" || value == "enabled";
+        if( !value.empty() && !is_bool_true ){
+           sld::internal::export_noise_filename = value;
+        }
+        return true;
+     }
+
+     test = "export-noise-atom";
+     if( word == test ){
+        int a = vin::str_to_uint64(value);
+        vin::check_for_valid_int(a, word, line, "spin-lattice", 0, 100000000, "input", ">= 0");
+        sld::internal::export_noise_atom = a;
+        return true;
+     }
+
       //--------------------------------------------------------------------
       // Keyword not found
       //--------------------------------------------------------------------

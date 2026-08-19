@@ -170,12 +170,19 @@ namespace sim{
             return true;
          }
          //--------------------------------------------------------------------
+         test="llg-heun-quantum";
+         if( value == test ){
+            sim::integrator = sim::llg_heun_quantum;
+            return true;
+         }
+         //--------------------------------------------------------------------
          else{
             terminaltextcolor(RED);
                std::cerr << "Error - value for \'sim:" << word << "\' must be one of:" << std::endl;
                std::cerr << "\t\"llg-heun\"" << std::endl;
                std::cerr << "\t\"llg-midpoint\"" << std::endl;
                std::cerr << "\t\"llg-quantum\"" << std::endl;
+               std::cerr << "\t\"llg-heun-quantum\"" << std::endl;
                std::cerr << "\t\"monte-carlo\"" << std::endl;
                std::cerr << "\t\"constrained-monte-carlo\"" << std::endl;
                std::cerr << "\t\"lsf\"" << std::endl;

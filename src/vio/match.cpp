@@ -43,6 +43,7 @@
 #include "micromagnetic.hpp"
 #include "sld.hpp"
 #include "spinwaves.hpp" // JRH
+#include "quantum.hpp"
 
 // vio module headers
 #include "internal.hpp"
@@ -95,6 +96,7 @@ namespace vin{
         else if(micromagnetic::match_input_parameter(key, word, value, unit, line)) return EXIT_SUCCESS;
         else if(environment::match_input_parameter(key, word, value, unit, line)) return EXIT_SUCCESS;
         else if(hamr::match_input_parameter(key, word, value, unit, line)) return EXIT_SUCCESS;
+        else if(quantum::match_input_parameter(key, word, value, unit, line)) return EXIT_SUCCESS;
         else if(sld::match_input_parameter(key, word, value, unit, line)) return EXIT_SUCCESS;
         else if(spinwaves::match_input_parameter(key, word, value, unit, line)) return EXIT_SUCCESS; // JRH spinwaves input parameters
         //===================================================================
@@ -339,29 +341,29 @@ namespace vin{
         //-------------------------------------------------------------------
 
         //-------------------------------------------------------------------
-        std::string test = "noise-type";
-        if (word == test) {
-            if (value == "classical") {
-                sim::noise_type = 0;
-                return EXIT_SUCCESS;
-            } else if (value == "quantum") {
-                sim::noise_type = 1;
-                return EXIT_SUCCESS;
-            } else if (value == "semiquantum") {
-                sim::noise_type = 2;
-                return EXIT_SUCCESS;
-            } else {
-                terminaltextcolor(RED);
-                std::cerr << "Error - value for 'sim:" << word << "' must be one of:" << std::endl;
-                std::cerr << "\t\"classical\"" << std::endl;
-                std::cerr << "\t\"quantum\"" << std::endl;
-                std::cerr << "\t\"semiquantum\"" << std::endl;
-                terminaltextcolor(WHITE);
-                err::vexit();
-            }
-        }
+        // std::string test = "noise-type";
+        // if (word == test) {
+        //     if (value == "classical") {
+        //         sim::noise_type = 0;
+        //         return EXIT_SUCCESS;
+        //     } else if (value == "quantum") {
+        //         sim::noise_type = 1;
+        //         return EXIT_SUCCESS;
+        //     } else if (value == "semiquantum") {
+        //         sim::noise_type = 2;
+        //         return EXIT_SUCCESS;
+        //     } else {
+        //         terminaltextcolor(RED);
+        //         std::cerr << "Error - value for 'sim:" << word << "' must be one of:" << std::endl;
+        //         std::cerr << "\t\"classical\"" << std::endl;
+        //         std::cerr << "\t\"quantum\"" << std::endl;
+        //         std::cerr << "\t\"semiquantum\"" << std::endl;
+        //         terminaltextcolor(WHITE);
+        //         err::vexit();
+        //     }
+        // }
         //-------------------------------------------------------------------
-        test="enable-fmr-field";
+        std::string test="enable-fmr-field";
         if(word==test){
             sim::hamiltonian_simulation_flags[5]=1;
             return EXIT_SUCCESS;
@@ -1487,6 +1489,7 @@ namespace vin{
          if(word==test){
             stats::calculate_system_spin_temp = true;
             output_list.push_back(74);
+            return EXIT_SUCCESS;
          }
          //--------------------------------------------------------------------
          test="mean-spin-temperature";
@@ -2449,6 +2452,7 @@ namespace vin{
             else if(unitcell::match_material_parameter(word, value, unit, line, super_index, sub_index)) return EXIT_SUCCESS;
             else if(micromagnetic::match_material_parameter(word, value, unit, line, super_index, sub_index)) return EXIT_SUCCESS;
             else if(environment::match_material_parameter(word, value, unit, line, super_index, sub_index)) return EXIT_SUCCESS;
+            else if(quantum::match_material_parameter(word, value, unit, line, super_index, sub_index)) return EXIT_SUCCESS;
             else if(sld::match_material_parameter(word, value, unit, line, super_index, sub_index)) return EXIT_SUCCESS;
 
             //--------------------------------------------------------------------

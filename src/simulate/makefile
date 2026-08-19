@@ -9,7 +9,6 @@ increment_time.o \
 initialize.o \
 initialize_modules.o \
 interface.o \
-llg_quantum.o \
 LSF.o \
 LSF_RK4.o
 

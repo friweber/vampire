@@ -7,8 +7,8 @@ mpi_objects = \
  data.o \
  decomposition.o \
  LLGHeun-mpi.o \
+ LLGHeun_quantum-mpi.o \
  LLGMidpoint-mpi.o \
- llg_quantum_mpi.o \
  mpi_generic.o \
  mpi_comms.o \
  parallel_rng_seed.o \

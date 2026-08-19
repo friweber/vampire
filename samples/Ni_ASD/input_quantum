@@ -1,0 +1,48 @@
+#------------------------------------------
+# Ni ASD — quantum noise (coth, including zero-point)
+# quantum:heun-noise-type = quantum
+# Uses Ornstein-Uhlenbeck bath with Matsubara modes.
+# Spectral weight: coth(omega/2T) — includes zero-point fluctuations.
+#------------------------------------------
+
+#------------------------------------------
+# Creation
+#------------------------------------------
+create:crystal-structure=fcc
+create:periodic-boundaries-x
+create:periodic-boundaries-y
+create:periodic-boundaries-z
+
+#------------------------------------------
+# System Dimensions
+#------------------------------------------
+dimensions:unit-cell-size = 3.524 !A
+dimensions:system-size-x  = 4.0   !nm
+dimensions:system-size-y  = 4.0   !nm
+dimensions:system-size-z  = 4.0   !nm
+
+#------------------------------------------
+# Material
+#------------------------------------------
+material:file=Ni_ASD.mat
+
+#------------------------------------------
+# Simulation
+#------------------------------------------
+sim:integrator               = llg-heun-quantum
+quantum:heun-noise-type      = quantum
+quantum:bath-modes           = 30
+
+sim:program                  = time-series
+sim:time-step                = 1e-15
+sim:total-time-steps         = 100000
+sim:equilibration-time-steps = 10000
+sim:temperature              = 300
+
+#------------------------------------------
+# Output
+#------------------------------------------
+output:output-rate           = 100
+output:real-time
+output:mean-magnetisation-length
+output:magnetisation

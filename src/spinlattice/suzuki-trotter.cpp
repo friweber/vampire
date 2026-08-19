@@ -14,6 +14,7 @@
 // C++ standard library headers
 #include <iostream>
 #include <cmath>
+#include <fstream>
 #include <vector>
 
 // Vampire headers
@@ -24,6 +25,7 @@
 #include "random.hpp"
 #include "sim.hpp"
 #include "sld.hpp"
+#include "quantum.hpp"
 
 //sld module headers M Strungaru
 #include "internal.hpp"
@@ -112,6 +114,34 @@ namespace sld{
       generate (Fx_th.begin(),Fx_th.end(), mtrandom::gaussian);
       generate (Fy_th.begin(),Fy_th.end(), mtrandom::gaussian);
       generate (Fz_th.begin(),Fz_th.end(), mtrandom::gaussian);
+
+      // If quantum noise is selected, draw the colored spin + phonon noise once
+      // per step (held fixed across all spin/velocity sub-updates below).
+      if (sld::internal::quantum_noise_type != sld::internal::sld_classical) {
+         quantum::sld_noise::generate(num_atoms);
+      }
+
+      // Diagnostic: append the actual injected noise (spin field + lattice force,
+      // x-component) for one atom to noise.dat — exactly the values fed into the
+      // integrator below, for whichever noise type is active.
+      if (sld::internal::export_noise) {
+         const int a = sld::internal::export_noise_atom;
+         if (a >= 0 && a < num_atoms) {
+            if (sld::internal::quantum_noise_type == sld::internal::sld_classical) {
+               const int imat = atoms::type_array[a];
+               const bool eq = (sim::time < sim::equilibration_time);
+               const double spin_noise = (eq ? mp::material[imat].H_th_sigma_eq
+                                             : mp::material[imat].H_th_sigma) * sqrt(sim::temperature);
+               const double velo_noise = (eq ? sld::internal::mp[imat].F_th_sigma_eq.get()
+                                             : sld::internal::mp[imat].F_th_sigma.get()) * sqrt(sim::temperature);
+               sld::internal::write_noise_sample(sim::time * mp::dt_SI,
+                                                 spin_noise * Hx_th[a],
+                                                 velo_noise * Fx_th[a]);
+            } else {
+               quantum::sld_noise::export_spin_noise_step(sim::time * mp::dt_SI);
+            }
+         }
+      }
 
 
       std::fill(sld::internal::fields_array_x.begin(), sld::internal::fields_array_x.end(), 0.0);
@@ -296,9 +326,19 @@ namespace sld{
               velo_noise=sld::internal::mp[imat].F_th_sigma_eq.get()*sqrt(sim::temperature);
        }
 
-             atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom]+ dt2_m * sld::internal::forces_array_x[atom]+dt2*velo_noise*Fx_th[atom];
-             atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom]+ dt2_m * sld::internal::forces_array_y[atom]+dt2*velo_noise*Fy_th[atom];
-             atoms::z_velo_array[atom] =  f_eta*atoms::z_velo_array[atom]+ dt2_m * sld::internal::forces_array_z[atom]+dt2*velo_noise*Fz_th[atom];
+             // phonon (force) noise: classical white or quantum colored
+             double pnx, pny, pnz;
+             if (sld::internal::quantum_noise_type == sld::internal::sld_classical) {
+                pnx = velo_noise*Fx_th[atom]; pny = velo_noise*Fy_th[atom]; pnz = velo_noise*Fz_th[atom];
+             } else {
+                pnx = quantum::sld_noise::phonon(atom,0);
+                pny = quantum::sld_noise::phonon(atom,1);
+                pnz = quantum::sld_noise::phonon(atom,2);
+             }
+
+             atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom]+ dt2_m * sld::internal::forces_array_x[atom]+dt2*pnx;
+             atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom]+ dt2_m * sld::internal::forces_array_y[atom]+dt2*pny;
+             atoms::z_velo_array[atom] =  f_eta*atoms::z_velo_array[atom]+ dt2_m * sld::internal::forces_array_z[atom]+dt2*pnz;
 
              atoms::x_coord_array[atom] +=  mp::dt_SI*1e12 * atoms::x_velo_array[atom];
              atoms::y_coord_array[atom] +=  mp::dt_SI*1e12 * atoms::y_velo_array[atom];
@@ -367,10 +407,19 @@ namespace sld{
                 velo_noise=sld::internal::mp[imat].F_th_sigma_eq.get()*sqrt(sim::temperature);
           }
 
+         // phonon (force) noise: classical white or quantum colored
+         double pnx, pny, pnz;
+         if (sld::internal::quantum_noise_type == sld::internal::sld_classical) {
+            pnx = velo_noise*Fx_th[atom]; pny = velo_noise*Fy_th[atom]; pnz = velo_noise*Fz_th[atom];
+         } else {
+            pnx = quantum::sld_noise::phonon(atom,0);
+            pny = quantum::sld_noise::phonon(atom,1);
+            pnz = quantum::sld_noise::phonon(atom,2);
+         }
 
-         atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*velo_noise*Fx_th[atom];
-         atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*velo_noise*Fy_th[atom];
-         atoms::z_velo_array[atom] =  f_eta*atoms::z_velo_array[atom] + dt2_m * sld::internal::forces_array_z[atom]+dt2*velo_noise*Fz_th[atom];
+         atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*pnx;
+         atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*pny;
+         atoms::z_velo_array[atom] =  f_eta*atoms::z_velo_array[atom] + dt2_m * sld::internal::forces_array_z[atom]+dt2*pnz;
 
 
       }
@@ -613,9 +662,21 @@ void add_spin_noise(const int start_index,
         double Sy = y_spin_array[i];
         double Sz = z_spin_array[i];
 
-        double Fx = fields_array_x[i] + spin_noise * Hx_th[i];
-        double Fy = fields_array_y[i] + spin_noise * Hy_th[i];
-        double Fz = fields_array_z[i] + spin_noise * Hz_th[i];
+        // spin (H_eff) noise: classical white (spin_noise*H_th) or quantum colored.
+        // The quantum field already carries the correct amplitude (see
+        // material_sld_spin_amp_array), so it replaces the spin_noise*H_th term.
+        double nx, ny, nz;
+        if (sld::internal::quantum_noise_type == sld::internal::sld_classical) {
+           nx = spin_noise * Hx_th[i]; ny = spin_noise * Hy_th[i]; nz = spin_noise * Hz_th[i];
+        } else {
+           nx = quantum::sld_noise::spin(i,0);
+           ny = quantum::sld_noise::spin(i,1);
+           nz = quantum::sld_noise::spin(i,2);
+        }
+
+        double Fx = fields_array_x[i] + nx;
+        double Fy = fields_array_y[i] + ny;
+        double Fz = fields_array_z[i] + nz;
 
         double FxSx = Fy * Sz - Fz * Sy;
         double FxSy = Fz * Sx - Fx * Sz;
@@ -630,6 +691,19 @@ void add_spin_noise(const int start_index,
 
 return;
 }//end of add_spin_noise
+
+
+//------------------------------------------------------------------------------
+// Append one diagnostic noise sample (time, spin_x, lattice_x) to the export
+// file. The stream is opened (truncating) on the first call and kept open for
+// the lifetime of the run, so each step adds one row.
+//------------------------------------------------------------------------------
+void write_noise_sample(double t, double spin_x, double lattice_x){
+   static std::ofstream out(export_noise_filename.c_str(), std::ios::out | std::ios::trunc);
+   if(out.is_open()){
+      out << t << "\t" << spin_x << "\t" << lattice_x << "\n";
+   }
+}
 
 
 } // end of internal namespace
