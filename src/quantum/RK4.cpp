@@ -227,7 +227,24 @@ namespace quantum{
       // Result stored in qn_{x,y,z}_array[atom] and held fixed across K1-K4.
       //=====================================================================
       void draw_noise_all_atoms_HO(const int lo, const int hi, const double dt) {
-         const double T_scaled = scale_temperature(sim::temperature);
+
+         // Per-material scaled temperature, with the same rescaling that
+         // calculate_thermal_fields() applies to the classical thermal field:
+         //   T_resc = Tc (T/Tc)^alpha  for T < Tc, else T.
+         // This path replaces that function, so without this the rescaling
+         // keywords would be silently ignored on the open-system route too.
+         // Defaults (alpha = 1, Tc = 0) leave the temperature untouched.
+         // Rescaling is a classical-model correction and is applied only to the
+         // classical branch; the coloured baths below use the bare temperature.
+         static std::vector<double> T_scaled_mat;
+         T_scaled_mat.resize(mp::material.size());
+         for (size_t m = 0; m < mp::material.size(); ++m) {
+            double T = sim::temperature;
+            if (sim::local_temperature) T = mp::material[m].temperature;
+            const double a  = mp::material[m].temperature_rescaling_alpha;
+            const double Tc = mp::material[m].temperature_rescaling_Tc;
+            T_scaled_mat[m] = scale_temperature(T < Tc ? Tc * std::pow(T / Tc, a) : T);
+         }
 
          for (int atom = lo; atom < hi; ++atom) {
             const int imaterial = atoms::type_array[atom];
@@ -235,6 +252,7 @@ namespace quantum{
                const double A     = material_A_array[imaterial];
                const double Gamma = material_gamma_array[imaterial];
                const double S0    = material_S0_array[imaterial];
+               const double T_scaled = T_scaled_mat[imaterial];
                const double noise_prefactor = std::sqrt(2.0 * Gamma * A * T_scaled / (S0 * dt));
                qn_x_array[atom] = noise_prefactor * mtrandom::gaussian();
                qn_y_array[atom] = noise_prefactor * mtrandom::gaussian();

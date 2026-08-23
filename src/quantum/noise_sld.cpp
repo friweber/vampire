@@ -499,6 +499,29 @@ static bool use_preallocated_noise = true;
          const double T_now    = scale_temperature_phonon(sim::temperature);
          const size_t st_size  = static_cast<size_t>(num_atoms) * n_bath_modes;
 
+         // Temperature rescaling is a correction to the CLASSICAL model: it
+         // bends the simulation temperature so a classical bath reproduces a
+         // measured M(T). A coloured bath is meant to fix M(T) from the
+         // spectrum instead, so applying both would double-count, and the
+         // coloured paths here deliberately do not. Say so rather than
+         // ignoring the keyword quietly.
+         if (noise_type != quantum::internal::classical) {
+            for (size_t m = 0; m < mp::material.size(); ++m) {
+               if (mp::material[m].temperature_rescaling_Tc > 0.0 &&
+                   mp::material[m].temperature_rescaling_alpha != 1.0) {
+                  std::cerr << "Warning: material " << m + 1
+                            << " sets temperature rescaling, which is NOT applied to "
+                            << "coloured (quantum) noise.\n"
+                            << "  Rescaling corrects a classical bath towards a measured "
+                            << "M(T); a coloured bath\n  addresses the same discrepancy "
+                            << "through its spectrum, so applying both double-counts.\n"
+                            << "  The rescaling keywords are being ignored for this run."
+                            << std::endl;
+                  break;
+               }
+            }
+         }
+
          // --- Spin bath setup ---
          // HO kinds: allocate the on-the-fly OU bath now.
          // FFT kinds: deferred until after the pre-generation attempt below,
@@ -601,10 +624,29 @@ static bool use_preallocated_noise = true;
       void generate(int num_atoms) {
          using namespace quantum::internal;
          if (noise_type == quantum::internal::classical) {
-            // Classical white Gaussian noise: amplitude = H_th_sigma * sqrt(T).
-            const double sqrt_T = std::sqrt(sim::temperature);
+            // Classical white Gaussian noise: amplitude = H_th_sigma * sqrt(T),
+            // with the same per-material temperature rescaling and localised
+            // temperature that calculate_thermal_fields() applies. This path
+            // replaces that function, so without this the rescaling keywords
+            // would be silently ignored and a rescaled run would be
+            // indistinguishable from an unrescaled one.
+            //
+            //   T_resc = Tc (T/Tc)^alpha   for T < Tc,   else T
+            //
+            // Defaults are alpha = 1, Tc = 0, so materials that set neither are
+            // unaffected.
+            static std::vector<double> sqrt_T_mat;
+            sqrt_T_mat.resize(mp::material.size());
+            for (size_t m = 0; m < mp::material.size(); ++m) {
+               double T = sim::temperature;
+               if (sim::local_temperature) T = mp::material[m].temperature;
+               const double a  = mp::material[m].temperature_rescaling_alpha;
+               const double Tc = mp::material[m].temperature_rescaling_Tc;
+               sqrt_T_mat[m] = std::sqrt(T < Tc ? Tc * std::pow(T / Tc, a) : T);
+            }
             for (int i = 0; i < num_atoms; ++i) {
-               const double amp = material_sld_classical_sigma_array[atoms::type_array[i]] * sqrt_T;
+               const int imat = atoms::type_array[i];
+               const double amp = material_sld_classical_sigma_array[imat] * sqrt_T_mat[imat];
                qn_x_array[i] = amp * mtrandom::gaussian();
                qn_y_array[i] = amp * mtrandom::gaussian();
                qn_z_array[i] = amp * mtrandom::gaussian();
