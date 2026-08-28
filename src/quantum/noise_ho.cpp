@@ -681,7 +681,17 @@ static bool use_preallocated_noise = true;
       lb_opt_casc_s_z.assign(casc_size, 0.0);
       lb_opt_casc_coeff.resize(n_bath_modes);
 
-      const double omega0_opt = material_omega0_array.empty() ? T_scaled : material_omega0_array[0];
+      // The bath reproduces the BARE driving spectrum, whose only scale is the
+      // temperature: quantum-no-zero rolls off at omega ~ 2T and is dead by
+      // ~10T. The Lorentzian omega0 belongs to the oscillator that FILTERS this
+      // noise afterwards, and must not enter the fit -- it used to, via
+      //   max(T_scaled, material_omega0_array[0]),
+      // which pushed the fitted lambda window up with omega0 once omega0 > T.
+      // At omega0 = 69107 and T_scaled = 223 that gave lambda = [1805, 2.2e8]:
+      // no modes at or below the thermal frequency at all, so the roll-off sat
+      // 8x too high and the bath poured power straight into the magnon band.
+      // The correct window depends on T alone and is ~[0.79 T, 2.07 T].
+      const double omega0_opt = T_scaled;
 
       // Frequency grid the objective is summed over.
       //

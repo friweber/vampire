@@ -86,8 +86,23 @@ namespace quantum{
             err::vexit();
          }
 
-         // Spin magnitude: S0 = mu_s / mu_B
-         double S0 = mp::material[m].mu_s_SI / 9.274009994e-24;
+         // Moment in units of hbar*gamma, NOT of mu_B.
+         //
+         // S0 divides the open-system noise amplitude (amp^2 = Gamma*A/S0 in
+         // noise_ho.cpp, the classical prefactor in RK4.cpp, and inv_sqrt_S0 on
+         // the FFT path), so it is what converts the bath temperature -- carried
+         // in reduced units as T_scaled = T*kB/(hbar*gamma) -- into a field.
+         // The consistent divisor is therefore mu_s/(hbar*gamma), not
+         // mu_s/mu_B: the two differ by the electron g-factor,
+         // hbar*gamma/mu_B = 2.0023.
+         //
+         // Using mu_B made the open-system field noise a factor g too WEAK
+         // against the fluctuation-dissipation requirement 2*alpha*kB*T/mu_s
+         // that the direct (ASD) route satisfies, so the same J gave an
+         // effective temperature of T/g. Measured with classical noise before
+         // this fix, matching m across five values: T_ASD/T_osLLG = 0.50 +/- 0.02.
+         const double hbar_gamma = 1.054571817e-34 * 1.760859644e11;   // = g*mu_B
+         double S0 = mp::material[m].mu_s_SI / hbar_gamma;
          double inv_sqrt_S0 = (S0 > 0.0) ? 1.0 / std::sqrt(S0) : 1.0;
 
          // Lorentzian amplitude: A = alpha * omega0^4 / Gamma
