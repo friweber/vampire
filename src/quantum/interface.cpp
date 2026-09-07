@@ -21,6 +21,8 @@
 //     quantum:bath-scan-omega-points       integer >= 50 (quantum-no-zero objective ω grid)
 //     quantum:bath-scan-decades            double  >= 1.0 (quantum-no-zero search box width)
 //     quantum:export-noise                 [filename]
+//     quantum:heun-export-noise            [filename]  (direct route only, see below)
+//     quantum:heun-export-noise-atom       integer >= 0  (direct route only)
 //
 //   Supported material file parameters:
 //     quantum-lorentzian-width            Gamma [rad/s]
@@ -38,6 +40,7 @@
 
 // Module headers
 #include "internal.hpp"
+#include "../spinlattice/internal.hpp"   // sld::internal::export_noise* (see heun-export-noise below)
 
 namespace quantum{
 
@@ -137,6 +140,41 @@ namespace quantum{
          if(!value.empty() && !is_bool_true){
             internal::export_noise_filename = value;
          }
+         return true;
+      }
+
+      //------------------------------------------------------------------------
+      // Export noise for the DIRECT route (sim:integrator=llg-heun-quantum).
+      //
+      // That route reads sld::internal::export_noise (LLGHeun_quantum.cpp),
+      // which is normally set by spin-lattice:export-noise -- but ANY
+      // "spin-lattice:" keyword unconditionally sets sld::enabled = true
+      // (sld/interface.cpp:38), pulling in the full lattice-dynamics module
+      // (masses, potentials, phonon setup). For a bare llg-heun-quantum run
+      // with no lattice configured that segfaults during SLD's own startup.
+      // This keyword pokes the same three flags directly, without touching
+      // sld::enabled, so the direct route's noise can be exported on its own.
+      //------------------------------------------------------------------------
+      test = "heun-export-noise";
+      if(word == test){
+         // Deliberately does NOT set internal::enabled: that flag also
+         // gates quantum::initialize() (initialize_modules.cpp), which the
+         // direct route never calls -- turning it on here made the run
+         // enter that open-system init path with no omega0/gamma set,
+         // which crashed instead of cleanly erroring.
+         sld::internal::export_noise = true;
+         const bool is_bool_true =
+            value == "true"  || value == "1"  || value == "yes" ||
+            value == "on"    || value == "enable" || value == "enabled";
+         if(!value.empty() && !is_bool_true){
+            sld::internal::export_noise_filename = value;
+         }
+         return true;
+      }
+
+      test = "heun-export-noise-atom";
+      if(word == test){
+         sld::internal::export_noise_atom = vin::str_to_uint64(value);
          return true;
       }
 
