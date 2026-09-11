@@ -56,6 +56,7 @@
 #include "errors.hpp"
 #include "LLG.hpp"
 #include "material.hpp"
+#include "quantum.hpp"
 #include "sim.hpp"
 
 namespace LLG_arrays{
@@ -164,11 +165,20 @@ int LLG_Heun(){
 	// Check for initialisation of LLG integration arrays
 	if(LLG_set==false) sim::LLGinit();
 
+	// Optional coloured (quantum) thermal bath. When enabled, the quantum
+	// module has switched the classical thermal field off and its sample
+	// is added to the external field below.
+	const bool q_noise = quantum::enabled();
+
 	// Local variables for system integration
 	const int num_atoms=atoms::num_atoms;
 	double xyz[3];		// Local Delta Spin Components
 	double S_new[3];	// New Local Spin Moment
 	double mod_S;		// magnitude of spin moment
+
+	// Draw this step's coloured noise (one sample per atom, reused by both
+	// the Euler and the Heun stage)
+	if(q_noise) quantum::generate();
 
 	// Store initial spin positions
 	for(int atom=0;atom<num_atoms;atom++){
@@ -180,6 +190,7 @@ int LLG_Heun(){
 	// Calculate fields
 	calculate_spin_fields(0,num_atoms);
 	calculate_external_fields(0,num_atoms);
+	quantum::add_field(0,num_atoms);
 
 	// Calculate Euler Step
 	for(int atom=0;atom<num_atoms;atom++){
@@ -231,6 +242,15 @@ int LLG_Heun(){
 
 	// Recalculate spin dependent fields
 	calculate_spin_fields(0,num_atoms);
+
+	// The coloured-bath path also refreshes the external field here and
+	// re-injects the SAME pre-drawn noise -- the correct Heun treatment of
+	// multiplicative noise. The classical path deliberately does not: it
+	// reuses the external field built for the Euler stage.
+	if(q_noise){
+		calculate_external_fields(0,num_atoms);
+		quantum::add_field(0,num_atoms);
+	}
 
 	// Calculate Heun Gradients
 	for(int atom=0;atom<num_atoms;atom++){

@@ -96,14 +96,6 @@ namespace sld{
 
       std::vector<int> test_atom_list; //Core atoms of each octant
 
-      // Quantum noise type for both spin and phonon subsystems (default: classical)
-      sld_noise_t quantum_noise_type = sld_classical;
-
-      // Diagnostic noise export (default: off)
-      bool export_noise = false;
-      std::string export_noise_filename = "noise.dat";
-      int  export_noise_atom = 0;
-
       //MPI variables
       std::vector<std::vector<int> > c_octants; //Core atoms of each octant
       std::vector<std::vector<int> > b_octants; //Boundary atoms of each octant

@@ -9,28 +9,10 @@
 //
 //------------------------------------------------------------------------------
 //
-//   Initialization for the quantum thermostat module.
-//
-//   initialize()     — Common entry point: populates material parameter arrays,
-//                      disables the standard thermal field, and dispatches to
-//                      the method-specific initializer (FFT or HO).
-//
-//   initialize_FFT() — Sets up the FFT noise pipeline. Determines whether to
-//                      use windowed or non-windowed mode based on window_size
-//                      vs total simulation length. Allocates all integration
-//                      arrays and generates the initial noise.
-//
-//   initialize_HO()  — Allocates integration arrays for the on-the-fly
-//                      harmonic oscillator noise method.
-//
-//   supported_program() — Returns true if the selected program is compatible
-//                         with the quantum thermostat, and outputs the total
-//                         number of simulation time steps.
-//
-//------------------------------------------------------------------------------
 
 // C++ standard library headers
-#include <algorithm>
+#include <cmath>
+#include <iostream>
 
 // Vampire headers
 #include "atoms.hpp"
@@ -40,396 +22,345 @@
 #include "program.hpp"
 #include "quantum.hpp"
 #include "sim.hpp"
+#include "vio.hpp"
 #include "vmpi.hpp"
 
-// Module headers
+// quantum module headers
 #include "internal.hpp"
 
 namespace quantum{
 
-   // Forward declarations for method-specific initialization
-   bool supported_program(uint64_t& total_simulation_time);
-   void initialize_FFT();
-   void initialize_HO();
+   namespace internal{
 
-   //========================================================================
-   // Common initialization entry point
-   //========================================================================
+      // reduced temperature per Kelvin for the spin system, kB/(hbar gamma_e)
+      static double spin_temperature_scale(){
+         return constants::kB/(constants::hbar*constants::gyromagnetic_ratio);
+      }
+
+      // hbar in eV ps, the unit system of the lattice integrator
+      static double hbar_eVps(){
+         return constants::hbar*constants::kB_eV/constants::kB*1.0e12;
+      }
+
+      //---------------------------------------------------------------------------
+      // Function to return the number of atoms this rank integrates
+      //---------------------------------------------------------------------------
+      int num_local_atoms(){
+         #ifdef MPICF
+            return vmpi::num_core_atoms + vmpi::num_bdry_atoms;
+         #else
+            return atoms::num_atoms;
+         #endif
+      }
+
+      //---------------------------------------------------------------------------
+      // Function to return the number of integration steps of the selected
+      // program, or false if the program is not known to the module
+      //---------------------------------------------------------------------------
+      bool run_length(uint64_t& n_steps){
+
+         const uint64_t et = sim::equilibration_time;
+         const uint64_t tt = sim::total_time;
+         const uint64_t lt = sim::loop_time;
+
+         switch(program::program){
+            case  0: n_steps = tt;      return true; // benchmark
+            case  1: n_steps = et + tt; return true; // time series
+            case  2: n_steps = et + lt; return true; // hysteresis
+            case  3: n_steps = et + lt; return true; // static hysteresis
+            case  4: n_steps = et + lt; return true; // Curie temperature
+            case  5: n_steps = et + tt; return true; // field cool
+            case  6: n_steps = et + tt; return true; // laser / temperature pulse
+            case  7: n_steps = et + tt; return true; // HAMR
+            case 11: n_steps = et + tt; return true; // Lagrange multiplier
+            case 12: n_steps = et + lt; return true; // partial hysteresis
+            case 13: n_steps = et + tt; return true; // localised temperature pulse
+            case 14: n_steps = et + tt; return true; // effective damping
+            case 15: n_steps = et + tt; return true; // FMR
+            case 16: n_steps = et + tt; return true; // local field cool
+            case 17: n_steps = et + tt; return true; // electrical pulse
+            case 18: n_steps = et + tt; return true; // field pulse
+            case 52: n_steps = et + tt; return true; // domain walls
+            case 70: n_steps = et + lt; return true; // field sweep
+            case 74: n_steps = et + tt; return true; // spin waves
+            default: return false;
+         }
+
+      }
+
+      //---------------------------------------------------------------------------
+      // Function to report whether the program moves sim::temperature during
+      // the run; pre-generated noise is shaped once and cannot follow it
+      //---------------------------------------------------------------------------
+      bool dynamic_temperature_program(){
+
+         switch(program::program){
+            case  5: // field cool
+            case  6: // laser / temperature pulse
+            case  7: // HAMR
+            case 13: // localised temperature pulse
+            case 16: // local field cool
+               return true;
+            default:
+               return false;
+         }
+
+      }
+
+      //---------------------------------------------------------------------------
+      // Names for the log and the export header
+      //---------------------------------------------------------------------------
+      const char* spectrum_name(const spectrum_t s){
+         if(s == classical) return "classical";
+         if(s == quantum_zero) return "quantum";
+         return "quantum-no-zero";
+      }
+
+      const char* generator_name(const generator_t g){
+         return (g == on_the_fly) ? "on-the-fly" : "pre-generated";
+      }
+
+      //---------------------------------------------------------------------------
+      // Function to check that a pre-generated bath can serve this program and
+      // to return the run length used to size its window
+      //---------------------------------------------------------------------------
+      static uint64_t pre_generated_run_length(){
+
+         uint64_t n_run = 0;
+
+         if(noise_generator != pre_generated) return n_run;
+
+         if(!run_length(n_run)){
+            terminaltextcolor(RED);
+            std::cerr << "Error: program " << program::program
+                      << " is not supported with pre-generated quantum noise." << std::endl;
+            terminaltextcolor(WHITE);
+            err::vexit();
+         }
+
+         if(dynamic_temperature_program()){
+            terminaltextcolor(RED);
+            std::cerr << "Error: pre-generated quantum noise is shaped once, at the starting temperature, "
+                      << "and cannot follow a program that changes the temperature. "
+                      << "Use quantum:noise-generator = on-the-fly." << std::endl;
+            terminaltextcolor(WHITE);
+            err::vexit();
+         }
+
+         return n_run;
+
+      }
+
+      //---------------------------------------------------------------------------
+      // Thermostat (llg-quantum): per-material Lorentzian response and a spin
+      // bath whose amplitude balances that response. Classical noise is
+      // allowed here; it is the classical open-system model.
+      //---------------------------------------------------------------------------
+      static void initialize_thermostat(){
+
+         const int n_mat = mp::num_materials;
+         if(mp.size() < static_cast<size_t>(n_mat)) mp.resize(n_mat);
+
+         material_A.resize(n_mat);
+         material_gamma.resize(n_mat);
+         material_omega0.resize(n_mat);
+         material_S0.resize(n_mat);
+
+         std::vector<double> amp(n_mat);
+
+         for(int m = 0; m < n_mat; m++){
+
+            const double alpha = mp::material[m].alpha;
+            const double gamma = mp[m].gamma.get();
+            const double omega0 = mp[m].omega0.get();
+
+            if(gamma <= 0.0 || omega0 <= 0.0){
+               terminaltextcolor(RED);
+               std::cerr << "Error: material " << m + 1 << " needs quantum-lorentzian-width and "
+                         << "quantum-lorentzian-central-frequency > 0 for sim:integrator = llg-quantum." << std::endl;
+               terminaltextcolor(WHITE);
+               err::vexit();
+            }
+
+            // the moment in units of hbar*gamma_e converts the reduced temperature to a field
+            const double S0 = mp::material[m].mu_s_SI/(constants::hbar*constants::gyromagnetic_ratio);
+            const double A = alpha*std::pow(omega0, 4)/gamma;
+
+            material_A[m] = A;
+            material_gamma[m] = gamma;
+            material_omega0[m] = omega0;
+            material_S0[m] = S0;
+
+            // on-the-fly: the oscillator filters the bath, amplitude sqrt(gamma A/S0);
+            // pre-generated: the filter is in the spectrum, amplitude 1/sqrt(S0)
+            amp[m] = (noise_generator == pre_generated) ? 1.0/std::sqrt(S0) : std::sqrt(gamma*A/S0);
+
+         }
+
+         const uint64_t n_run = pre_generated_run_length();
+         const int n = num_local_atoms();
+
+         setup_bath(spin_bath, noise_type, noise_generator, n, mp::dt, spin_temperature_scale(), amp, amp, true, n_run);
+         allocate_thermostat(n);
+
+         mode = thermostat;
+
+         return;
+
+      }
+
+      //---------------------------------------------------------------------------
+      // Spin bath for llg-heun: the classical thermal-field prefactor H_th_sigma
+      // times sqrt(dt hbar gamma_e/2kB) reproduces H_th_sigma sqrt(T) in the
+      // white limit
+      //---------------------------------------------------------------------------
+      static void initialize_llg_bath(){
+
+         const int n_mat = mp::num_materials;
+         const double pref = std::sqrt(mp::dt*constants::hbar*constants::gyromagnetic_ratio/(2.0*constants::kB));
+
+         std::vector<double> amp(n_mat);
+         for(int m = 0; m < n_mat; m++) amp[m] = mp::material[m].H_th_sigma*pref;
+
+         const uint64_t n_run = pre_generated_run_length();
+
+         setup_bath(spin_bath, noise_type, noise_generator, num_local_atoms(), mp::dt, spin_temperature_scale(), amp, amp, false, n_run);
+
+         mode = bath;
+
+         return;
+
+      }
+
+      //---------------------------------------------------------------------------
+      // Spin and lattice baths for spin-lattice dynamics. The lattice bath
+      // runs in the lattice integrator's units (ps, eV) and reproduces the
+      // classical force noise sqrt(2 eta kB T/m) in the white limit; both
+      // baths switch to the equilibration amplitudes with the integrator.
+      //---------------------------------------------------------------------------
+      static void initialize_lattice_baths(){
+
+         if(!lattice_parameters_set){
+            terminaltextcolor(RED);
+            std::cerr << "Error: quantum noise for spin-lattice dynamics requires the spin-lattice module "
+                      << "to be initialised first." << std::endl;
+            terminaltextcolor(WHITE);
+            err::vexit();
+         }
+
+         const int n_mat = mp::num_materials;
+         const int n = num_local_atoms();
+
+         // spin bath
+         const double pref = std::sqrt(mp::dt*constants::hbar*constants::gyromagnetic_ratio/(2.0*constants::kB));
+         std::vector<double> spin_amp(n_mat);
+         std::vector<double> spin_amp_eq(n_mat);
+         for(int m = 0; m < n_mat; m++){
+            spin_amp[m] = mp::material[m].H_th_sigma*pref;
+            spin_amp_eq[m] = mp::material[m].H_th_sigma_eq*pref;
+         }
+
+         const uint64_t n_run = pre_generated_run_length();
+
+         setup_bath(spin_bath, noise_type, noise_generator, n, mp::dt, spin_temperature_scale(), spin_amp, spin_amp_eq, false, n_run);
+
+         // lattice bath, always on-the-fly
+         const double hbar_ps = hbar_eVps();
+         std::vector<double> lattice_amp(n_mat);
+         std::vector<double> lattice_amp_eq(n_mat);
+         for(int m = 0; m < n_mat; m++){
+            const double mass = lattice_mass[m];
+            lattice_amp[m] = (mass > 0.0) ? std::sqrt(lattice_damping[m]*hbar_ps/mass) : 0.0;
+            lattice_amp_eq[m] = (mass > 0.0) ? std::sqrt(lattice_damping_eq[m]*hbar_ps/mass) : 0.0;
+         }
+
+         setup_bath(lattice_bath, noise_type, on_the_fly, n, mp::dt_SI*1.0e12, constants::kB_eV/hbar_ps, lattice_amp, lattice_amp_eq, false, 0);
+
+         mode = bath;
+
+         return;
+
+      }
+
+   } // end of internal namespace
+
+   //---------------------------------------------------------------------------
+   // Function to initialise the quantum module
+   //---------------------------------------------------------------------------
    void initialize(){
 
       using namespace internal;
 
-      if(!enabled) return;
+      mode = inactive;
 
-      // Disable standard thermal field — quantum module provides its own noise
+      // sim:integrator = llg-heun-quantum is the old spelling of llg-heun with a
+      // quantum bath; it implied the zero-point spectrum
+      if(sim::integrator == sim::llg_heun_quantum){
+         zlog << zTs() << "Warning: sim:integrator = llg-heun-quantum is deprecated; use llg-heun with quantum:noise-type." << std::endl;
+         if(!noise_type_set) noise_type = quantum_zero;
+      }
+
+      switch(sim::integrator){
+
+         case sim::llg_quantum:
+            initialize_thermostat();
+            break;
+
+         case sim::llg_heun:
+         case sim::llg_heun_quantum:
+            if(noise_type != classical) initialize_llg_bath();
+            break;
+
+         case sim::suzuki_trotter:
+            if(noise_type != classical) initialize_lattice_baths();
+            break;
+
+         default:
+            if(noise_type_set && noise_type != classical){
+               zlog << zTs() << "Warning: quantum:noise-type is ignored by the selected integrator." << std::endl;
+            }
+            break;
+
+      }
+
+      if(mode == inactive) return;
+
+      // the module provides the thermal noise from here on
       sim::hamiltonian_simulation_flags[3] = 0;
 
-      //---------------------------------------------------------------------
-      // Populate per-material parameter arrays from input file values
-      //---------------------------------------------------------------------
-      for(int m = 0; m < mp::num_materials; m++){
-
-         double alpha  = mp::material[m].alpha;
-         double gamma  = internal::mp[m].gamma.get();
-         double omega0 = internal::mp[m].omega0.get();
-
-         // Validate: gamma and omega0 must be strictly positive. Silent zeros
-         // produce A = NaN/0 and divergent noise downstream (FDT prefactor
-         // blows up, coth(ω/0) is ill-defined).
-         if (gamma <= 0.0 || omega0 <= 0.0) {
-            std::cerr << "Error: quantum thermostat material " << m
-                      << " has invalid Lorentzian parameters:\n"
-                      << "  quantum-lorentzian-width            (Gamma)  = " << gamma  << "\n"
-                      << "  quantum-lorentzian-central-frequency (omega0) = " << omega0 << "\n"
-                      << "Both must be strictly positive (rad/s). Check the .mat file."
-                      << std::endl;
-            err::vexit();
+      // a coloured bath uses the global temperature only
+      if(noise_type != classical){
+         bool rescaled = sim::local_temperature;
+         for(int m = 0; m < mp::num_materials; m++){
+            if(mp::material[m].temperature_rescaling_Tc > 0.0 && mp::material[m].temperature_rescaling_alpha != 1.0) rescaled = true;
          }
-
-         // Moment in units of hbar*gamma, NOT of mu_B.
-         //
-         // S0 divides the open-system noise amplitude (amp^2 = Gamma*A/S0 in
-         // noise_ho.cpp, the classical prefactor in RK4.cpp, and inv_sqrt_S0 on
-         // the FFT path), so it is what converts the bath temperature -- carried
-         // in reduced units as T_scaled = T*kB/(hbar*gamma) -- into a field.
-         // The consistent divisor is therefore mu_s/(hbar*gamma), not
-         // mu_s/mu_B: the two differ by the electron g-factor,
-         // hbar*gamma/mu_B = 2.0023.
-         //
-         // Using mu_B made the open-system field noise a factor g too WEAK
-         // against the fluctuation-dissipation requirement 2*alpha*kB*T/mu_s
-         // that the direct (ASD) route satisfies, so the same J gave an
-         // effective temperature of T/g. Measured with classical noise before
-         // this fix, matching m across five values: T_ASD/T_osLLG = 0.50 +/- 0.02.
-         const double hbar_gamma = 1.054571817e-34 * 1.760859644e11;   // = g*mu_B
-         double S0 = mp::material[m].mu_s_SI / hbar_gamma;
-         double inv_sqrt_S0 = (S0 > 0.0) ? 1.0 / std::sqrt(S0) : 1.0;
-
-         // Lorentzian amplitude: A = alpha * omega0^4 / Gamma
-         double A = alpha * pow(omega0, 4) / gamma;
-
-         material_gamma_array.push_back(gamma);
-         material_omega0_array.push_back(omega0);
-         material_A_array.push_back(A);
-         material_S0_array.push_back(S0);
-         material_inv_sqrt_S0_array.push_back(inv_sqrt_S0);
+         if(rescaled){
+            zlog << zTs() << "Warning: temperature rescaling and material temperatures are not applied to coloured quantum noise; "
+                 << "sim:temperature is used." << std::endl;
+         }
       }
 
-      //---------------------------------------------------------------------
-      // Construct default export-noise filename if the user requested
-      // export but did not supply a name. Self-explanatory format:
-      //   <noise-type>_<method>_noise.dat
-      //---------------------------------------------------------------------
-      if (export_noise && export_noise_filename.empty()) {
-         export_noise_filename = std::string(noise_type_name(noise_type)) + "_"
-                               + llg_method_short_name(llg_method) + "_noise.dat";
-      }
+      if(export_noise) export_open((mode == thermostat) ? "auxiliary oscillator q" : "spin bath sample");
 
-      //---------------------------------------------------------------------
-      // Unified startup banner. Same shape for FFT and HO; method-specific
-      // lines are printed by the per-method initializer.
-      //---------------------------------------------------------------------
-      std::cout << "Initializing Quantum Noise Module..." << std::endl;
-      std::cout << "  Method            : " << llg_method_long_name(llg_method) << std::endl;
-      std::cout << "  Noise type        : " << noise_type_name(noise_type)      << std::endl;
-      std::cout << "  Temperature       : " << sim::temperature                 << " K"  << std::endl;
-      std::cout << "  Time step         : " << mp::dt                           << " s"  << std::endl;
-      if (export_noise) {
-         std::cout << "  Noise export      : " << export_noise_filename << std::endl;
-      }
-      std::cout << "  Materials         : " << mp::num_materials << std::endl;
-      for (int m = 0; m < mp::num_materials; m++) {
-         std::cout << "    [" << m << "]"
-                   << " A="  << material_A_array[m]
-                   << "  Gamma=" << material_gamma_array[m]
-                   << "  omega0=" << material_omega0_array[m]
-                   << "  S0=" << material_S0_array[m] << std::endl;
-      }
-
-      //---------------------------------------------------------------------
-      // Dispatch to method-specific initialization
-      //---------------------------------------------------------------------
-      if(llg_method == llg_ho){
-         initialize_HO();
-      }
-      else if(llg_method == llg_fft){
-         initialize_FFT();
-      }
+      zlog << zTs() << "Initialising quantum noise module: "
+           << ((mode == thermostat) ? "open-system LLG" : "coloured bath") << ", spectrum "
+           << spectrum_name(noise_type) << ", generator " << generator_name(noise_generator)
+           << ", " << spin_bath.n_sites << " atoms";
+      if(noise_type != classical && noise_generator == on_the_fly) zlog << ", " << n_bath_modes << " bath modes";
+      if(lattice_bath.n_sites > 0) zlog << ", lattice bath";
+      zlog << std::endl;
 
       return;
+
    }
 
-   //========================================================================
-   // FFT-specific initialization
-   //
-   // Determines the total simulation length, computes coarse grid parameters,
-   // allocates integration arrays, and generates noise. If the requested
-   // window_size is smaller than the total simulation, windowed mode is used.
-   //========================================================================
-   void initialize_FFT(){
-
-      using namespace internal;
-
-      // Check that this program is supported by the quantum thermostat
-      uint64_t total_simulation_time = 0;
-      if(!supported_program(total_simulation_time)){
-         std::cerr << "Error: program " << program::program
-                   << " is not supported with the quantum thermostat." << std::endl;
-         err::vexit();
-      }
-
-      // Convert temperature from Kelvin to internal units (rad/s).
-      const double T = scale_temperature(sim::temperature);
-
-      // If window_size is zero (default), set to full simulation length
-      if(window_size == 0){
-         window_size = total_simulation_time + 1;
-      }
-
-      // Fine time grid (used for spin dynamics integration)
-      double dt_fine = mp::dt;
-      uint64_t n_fine = total_simulation_time + 1;
-
-      // Coarse time grid (used for noise generation)
-      int M = internal::M_decimation;
-      int n_coarse = (n_fine > 0) ? ((n_fine - 1) / M + 1) : 0;
-
-      // FFT-specific banner block (matches the unified banner shape)
-      std::cout << "  Total time steps  : " << n_fine    << std::endl;
-      std::cout << "  Window size       : " << window_size << "  (fine steps)" << std::endl;
-      std::cout << "  Interpolation M   : " << M         << "  (-> " << n_coarse << " coarse steps)" << std::endl;
-      std::cout << "  Note: FFT noise is fixed at the initial sim::temperature." << std::endl;
-      std::cout << "        Use quantum:llg-method=llg-ho for dynamic-T programs." << std::endl;
-
-      // Number of atoms (including MPI boundary atoms)
-      #ifdef MPICF
-         const int num_atoms_total = vmpi::num_core_atoms + vmpi::num_bdry_atoms;
-      #else
-         const int num_atoms_total = atoms::num_atoms;
-      #endif
-
-      int realizations = num_atoms_total * 3;  // 3 spatial components per atom
-
-      //---------------------------------------------------------------------
-      // Allocate per-atom integration arrays (9 components: S, q, p)
-      //---------------------------------------------------------------------
-      q_x_array.resize(num_atoms_total, 0.0);
-      q_y_array.resize(num_atoms_total, 0.0);
-      q_z_array.resize(num_atoms_total, 0.0);
-      p_x_array.resize(num_atoms_total, 0.0);
-      p_y_array.resize(num_atoms_total, 0.0);
-      p_z_array.resize(num_atoms_total, 0.0);
-
-      k1_storage.resize(num_atoms_total, std::vector<double>(9));
-      k2_storage.resize(num_atoms_total, std::vector<double>(9));
-      k3_storage.resize(num_atoms_total, std::vector<double>(9));
-      k4_storage.resize(num_atoms_total, std::vector<double>(9));
-      y_pred_storage.resize(num_atoms_total, std::vector<double>(9));
-      y_in_storage.resize(num_atoms_total, std::vector<double>(9));
-
-      // Per-atom noise carrier — written once per RK4 step by
-      // draw_noise_all_atoms_FFT(), reused across K1-K4 via collect_H_FFT().
-      // (Same array the HO path uses — single noise carrier across both methods.)
-      qn_x_array.resize(num_atoms_total, 0.0);
-      qn_y_array.resize(num_atoms_total, 0.0);
-      qn_z_array.resize(num_atoms_total, 0.0);
-
-      //---------------------------------------------------------------------
-      // Choose between windowed and non-windowed noise generation
-      //---------------------------------------------------------------------
-      if(window_size < n_fine){
-
-         // --- Windowed mode with overlap-save ---
-         windowed_mode = true;
-         int window_n_coarse_local = (window_size > 0) ? ((window_size - 1) / M + 1) : 0;
-
-         // Round up to the next multiple of OVERLAP_SAVE_SEGMENTS so the
-         // window divides cleanly into segments for the overlap-save scheme.
-         if (window_n_coarse_local % OVERLAP_SAVE_SEGMENTS != 0) {
-            window_n_coarse_local = ((window_n_coarse_local / OVERLAP_SAVE_SEGMENTS) + 1)
-                                    * OVERLAP_SAVE_SEGMENTS;
-         }
-         const int seg      = window_n_coarse_local / OVERLAP_SAVE_SEGMENTS;
-         const int valid_nc = OVERLAP_SAVE_VALID * seg;
-
-         std::cout << "  Windowed noise generation enabled (overlap-save):" << std::endl;
-         std::cout << "    Window fine steps: " << window_size << std::endl;
-         std::cout << "    FFT coarse steps: " << window_n_coarse_local
-                   << " (" << OVERLAP_SAVE_SEGMENTS << " segments of " << seg << ")" << std::endl;
-         std::cout << "    Valid coarse steps per window: " << valid_nc << std::endl;
-
-         assign_unique_indices(valid_nc, num_atoms_total);
-         init_noise_structures(window_n_coarse_local, realizations, dt_fine, M, T);
-         generate_noise_window();
-      }
-      else{
-
-         // --- Non-windowed mode (all noise generated at once) ---
-         windowed_mode = false;
-         window_start_fine = 0;
-
-         assign_unique_indices(n_coarse, num_atoms_total);
-         init_noise_structures(n_coarse, realizations, dt_fine, M, T);
-         if (n_fine > 0) {
-            calculate_noise(realizations, dt_fine, M, T, n_coarse, coarse_noise_field);
-         }
-      }
-
-      // Export noise if requested (non-windowed mode only;
-      // windowed mode exports automatically after each window generation)
-      if(export_noise && !windowed_mode){
-         #ifdef MPICF
-         if(vmpi::my_rank == 0){
-         #endif
-            std::cout << "  Exporting noise data for analysis..." << std::endl;
-            export_noise_data(export_noise_filename);
-         #ifdef MPICF
-         }
-         #endif
-      }
-
+   //---------------------------------------------------------------------------
+   // Function to release the FFTW resources of both baths
+   //---------------------------------------------------------------------------
+   void cleanup(){
+      internal::fft_release(internal::spin_bath);
+      internal::fft_release(internal::lattice_bath);
       return;
-   }
-
-   //========================================================================
-   // Harmonic Oscillator-specific initialization
-   //
-   // Only allocates integration arrays. HO noise is generated on-the-fly
-   // during integration (no pre-generation needed).
-   //========================================================================
-   void initialize_HO(){
-
-      using namespace internal;
-
-      // HO-specific banner block (matches the unified banner shape).
-      // HO does not pre-generate a noise field, so the "total time steps"
-      // line is just the user's requested run length for reference.
-      const uint64_t total_steps = sim::equilibration_time + sim::total_time;
-      std::cout << "  Total time steps  : " << total_steps << std::endl;
-      if (noise_type != classical) {
-         std::cout << "  Bath modes        : " << n_bath_modes << std::endl;
-      }
-
-      // HO noise-export burn-in.  The auxiliary oscillator and bath modes
-      // start at zero; the first ~few hundred steps are a pure transient
-      // that, if recorded, dominates the low-frequency end of the Welch
-      // PSD and destroys the shape match.  Drop min(total_steps/5, 20000)
-      // samples before recording — matches cmp_noise's convention.
-      if (export_noise) {
-         noise_export_burnin_steps = std::min<uint64_t>(total_steps / 5, 20000);
-         noise_export_step_count   = 0;
-         std::cout << "  Export burn-in    : " << noise_export_burnin_steps
-                   << " steps (HO transient skipped)" << std::endl;
-      }
-
-      #ifdef MPICF
-         const int num_atoms_total = vmpi::num_core_atoms + vmpi::num_bdry_atoms;
-      #else
-         const int num_atoms_total = atoms::num_atoms;
-      #endif
-
-      q_x_array.resize(num_atoms_total, 0.0);
-      q_y_array.resize(num_atoms_total, 0.0);
-      q_z_array.resize(num_atoms_total, 0.0);
-      p_x_array.resize(num_atoms_total, 0.0);
-      p_y_array.resize(num_atoms_total, 0.0);
-      p_z_array.resize(num_atoms_total, 0.0);
-
-      k1_storage.resize(num_atoms_total, std::vector<double>(9));
-      k2_storage.resize(num_atoms_total, std::vector<double>(9));
-      k3_storage.resize(num_atoms_total, std::vector<double>(9));
-      k4_storage.resize(num_atoms_total, std::vector<double>(9));
-      y_pred_storage.resize(num_atoms_total, std::vector<double>(9));
-      y_in_storage.resize(num_atoms_total, std::vector<double>(9));
-
-      // Allocate per-atom noise arrays (reused across K1-K4 each step)
-      qn_x_array.resize(num_atoms_total, 0.0);
-      qn_y_array.resize(num_atoms_total, 0.0);
-      qn_z_array.resize(num_atoms_total, 0.0);
-
-      // Dispatch to the noise-type-specific setup (allocates per-atom
-      // oscillator state and precomputes coefficients). Lives in
-      // noise_ho.cpp alongside the matching generator.
-      // (mtrandom::grnd is already seeded by Vampire's parallel_rng_seed
-      //  module — no extra seeding is needed here.)
-      if (noise_type != classical) {
-         if (noise_type == quantum_no_zero) {
-            // When a Butterworth LP cutoff is set, use the filtered setup
-            // (which calls setup_log_bath_opt internally then allocates filter state).
-            if (butter_cutoff_Hz > 0.0)
-               setup_log_bath_filtered(num_atoms_total, butter_cutoff_Hz / 1.0e12);
-            else
-               setup_log_bath_opt(num_atoms_total);
-         } else {
-            setup_orn_uhl(num_atoms_total);
-         }
-      }
-
-      return;
-   }
-
-   //========================================================================
-   // Programs that move sim::temperature while the simulation runs.
-   //========================================================================
-   bool internal::dynamic_temperature_program(){
-      switch (program::program) {
-         case  5:   // field cool
-         case  6:   // laser / temperature pulse
-         case  7:   // HAMR
-         case 13:   // localised temperature pulse
-         case 16:   // local field cool
-            return true;
-         default:
-            return false;
-      }
-   }
-
-   //========================================================================
-   // Check if the selected simulation program is supported by the quantum
-   // thermostat module's currently selected llg_method, and report the
-   // total simulation time-step count.
-   //
-   // Two classes of programs:
-   //   * Static-T or single-pulse: supported on both FFT and HO paths.
-   //   * Dynamic-T (field cool, HAMR, localised T pulse, local field cool):
-   //     supported only on HO, because refresh_quantum_noise_for_T() tracks
-   //     sim::temperature every step. The FFT noise field is pre-generated
-   //     at init T and cannot follow runtime T changes, so it stays gated.
-   //========================================================================
-   bool supported_program(uint64_t& total_simulation_time){
-
-      const uint64_t et = sim::equilibration_time;
-      const uint64_t tt = sim::total_time;
-      const uint64_t lt = sim::loop_time;
-      const bool ho     = (internal::llg_method == internal::llg_ho);
-
-      switch (program::program) {
-
-         // --- Static-T or single-pulse programs (both paths) ---
-         case  0: total_simulation_time = tt;      return true;  // benchmark
-         case  1: total_simulation_time = et + tt; return true;  // time series
-         case  2: total_simulation_time = et + lt; return true;  // hysteresis
-         case  3: total_simulation_time = et + lt; return true;  // static hysteresis
-         case  4: total_simulation_time = et + lt; return true;  // Curie temperature
-         case 11: total_simulation_time = et + tt; return true;  // LaGrange multiplier
-         case 12: total_simulation_time = et + lt; return true;  // partial hysteresis
-         case 14: total_simulation_time = et + tt; return true;  // effective damping
-         case 15: total_simulation_time = et + tt; return true;  // FMR
-         case 17: total_simulation_time = et + tt; return true;  // electrical pulse
-         case 18: total_simulation_time = et + tt; return true;  // field pulse
-         case 52: total_simulation_time = et + tt; return true;  // domain walls
-         case 70: total_simulation_time = et + lt; return true;  // field sweep
-         case 74: total_simulation_time = et + tt; return true;  // spin waves
-
-         // --- Dynamic-T programs: HO only (FFT pipeline can't track runtime T) ---
-         case  5: total_simulation_time = et + tt; return ho;    // field cool
-         case  6: total_simulation_time = et + tt; return ho;    // laser / temperature pulse
-         case  7: total_simulation_time = et + tt; return ho;    // HAMR
-         case 13: total_simulation_time = et + tt; return ho;    // localised T pulse
-         case 16: total_simulation_time = et + tt; return ho;    // local field cool
-
-         default:                                  return false;
-      }
    }
 
 } // end of quantum namespace

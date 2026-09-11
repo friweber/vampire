@@ -257,30 +257,6 @@ namespace sim{
          return true;
       }
       //--------------------------------------------------------------------
-      test = "noise-type";
-      if (word == test) {
-          if (value == "classical") {
-             sim::noise_type = 0;
-             return EXIT_SUCCESS;
-          }
-          else if (value == "quantum") {
-             sim::noise_type = 1;
-             return EXIT_SUCCESS;
-          }
-          else if (value == "semiquantum") {
-             sim::noise_type = 2;
-             return EXIT_SUCCESS;
-          }
-          else {
-             terminaltextcolor(RED);
-             std::cerr << "Error - value for 'sim:" << word << "' must be one of:" << std::endl;
-             std::cerr << "\t\"classical\"" << std::endl;
-             std::cerr << "\t\"quantum\"" << std::endl;
-             std::cerr << "\t\"semiquantum\"" << std::endl;
-             terminaltextcolor(WHITE);
-             err::vexit();
-          }
-      }
       // input parameter not found here
       return false;
    }

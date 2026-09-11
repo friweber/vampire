@@ -25,6 +25,7 @@
 #ifdef MPICF
 #include "atoms.hpp"
 #include "material.hpp"
+#include "quantum.hpp"
 #include "errors.hpp"
 #include "LLG.hpp"
 #include "sim.hpp"
@@ -67,6 +68,15 @@ int LLG_Heun_mpi(){
 	double S_new[3];	/// New Local Spin Moment
 	double mod_S;		/// magnitude of spin moment
 
+		// Optional coloured (quantum) thermal bath. When enabled, the quantum
+		// module has switched the classical thermal field off and its sample
+		// is added to the external field below.
+		const bool q_noise = quantum::enabled();
+
+		// Draw this step's noise (one sample per local atom, core + boundary),
+		// reused by both the Euler and the Heun stage
+		if(q_noise) quantum::generate();
+
 		//----------------------------------------
 		// Initiate halo swap
 		//----------------------------------------
@@ -88,6 +98,7 @@ int LLG_Heun_mpi(){
 
 		calculate_spin_fields(pre_comm_si,pre_comm_ei);
 		calculate_external_fields(pre_comm_si,pre_comm_ei);
+		quantum::add_field(pre_comm_si,pre_comm_ei);
 
 		//----------------------------------------
 		// Calculate Euler Step (Core)
@@ -144,6 +155,7 @@ int LLG_Heun_mpi(){
 
 		calculate_spin_fields(post_comm_si,post_comm_ei);
 		calculate_external_fields(post_comm_si,post_comm_ei);
+		quantum::add_field(post_comm_si,post_comm_ei);
 
 		//----------------------------------------
 		// Calculate Euler Step (boundary)
@@ -209,6 +221,15 @@ int LLG_Heun_mpi(){
 
 		calculate_spin_fields(pre_comm_si,pre_comm_ei);
 
+		// The coloured-bath path also refreshes the external field here and
+		// re-injects the SAME pre-drawn noise -- the correct Heun treatment of
+		// multiplicative noise. The classical path deliberately does not: it
+		// reuses the external field built for the Euler stage.
+		if(q_noise){
+			calculate_external_fields(pre_comm_si,pre_comm_ei);
+			quantum::add_field(pre_comm_si,pre_comm_ei);
+		}
+
 		//----------------------------------------
 		// Calculate Heun Gradients (core)
 		//----------------------------------------
@@ -246,6 +267,11 @@ int LLG_Heun_mpi(){
 		//------------------------------------------
 
 		calculate_spin_fields(post_comm_si,post_comm_ei);
+
+		if(q_noise){
+			calculate_external_fields(post_comm_si,post_comm_ei);
+			quantum::add_field(post_comm_si,post_comm_ei);
+		}
 
 		//----------------------------------------
 		// Calculate Heun Gradients (boundary)

@@ -396,6 +396,7 @@ The following commands control the simulation, including the program, maximum te
   \item[] suzuki-trotter
   \item[] llg-quantum
 \end{itemize}
+\textit{llg-quantum} integrates the open-system LLG equation of the quantum module (see \textit{Quantum noise} below), in which every spin is coupled to an auxiliary harmonic oscillator with the Lorentzian response set by \textit{material:quantum-lorentzian-central-frequency} and \textit{material:quantum-lorentzian-width}; the spectral density of the bath is chosen with \textit{quantum:noise-type}. The spelling \textit{llg-heun-quantum} from earlier versions is accepted as a deprecated alias of \textit{llg-heun} with a quantum spectrum.
 
 {\zicf sim:program = exclusive string}\phantomsection\addcontentsline{toc}{subsection}{sim:program} Defines the simulation program to be used.
 
@@ -652,14 +653,47 @@ Defines the pulse linear fall time in the program \textit{electrical-pulse} with
  Defines the pulse time in the program \textit{field-pulse} with default
  units of seconds and a default pulse time of 1 ns.
 
-{\zicf sim:noise-type = string [default: classical]}\phantomsection\addcontentsline{toc}{subsection}{sim:noise-type}
-This keyword selects the thermostat that determines the statistical properties of the thermal noise field.
+\section*{Quantum noise}
+\phantomsection\addcontentsline{toc}{section}{Quantum noise}
+The quantum module replaces the classical white thermal noise by noise with a quantum spectral density. It works in two ways. With \textit{sim:integrator = llg-quantum} the module integrates the open-system LLG equation, in which every spin is coupled to an auxiliary harmonic oscillator with a Lorentzian response defined by \textit{material:quantum-lorentzian-central-frequency} and \textit{material:quantum-lorentzian-width}. With \textit{sim:integrator = llg-heun} or \textit{spin-lattice} the module supplies a coloured thermal bath that replaces the classical thermal field of that integrator; for spin-lattice dynamics the lattice (force) noise is replaced as well. With $T = k_B T_{\mathrm{K}}/\hbar$ the reduced temperature, the available spectral densities are
 \begin{itemize}
-    \item \texttt{classical}: Uses the classical thermostat, $\Theta_{cl}(\omega,T) = 2k_B T / (\hbar\omega)$. This option reproduces the behavior of the standard stochastic Landau-Lifshitz-Gilbert equation with white noise.
-    \item \texttt{quantum}: Implements the full quantum thermostat, $\Theta_{qu}(\omega,T) = \coth(\hbar\omega / 2k_B T)$. This thermostat includes quantum zero-point fluctuations, which results in a magnetization that is less than unity even at a temperature of 0~K.
-    \item \texttt{semiquantum}: \textbf{(Recommended)} Uses the "quantum no-zero" thermostat, $\Theta_{qnz}(\omega,T) = \coth(\hbar\omega / 2k_B T) - 1$. This approach correctly captures quantum effects at low temperatures while removing the zero-point fluctuations, ensuring the magnetization is fully saturated at 0~K.
+  \item[] classical: $S(\omega) = 2T$
+  \item[] quantum: $S(\omega) = \omega\coth(\omega/2T)$, including the zero-point fluctuations
+  \item[] quantum-no-zero: $S(\omega) = \omega\left[\coth(\omega/2T)-1\right]$, without the zero-point fluctuations
 \end{itemize}
+All three tend to the classical value $2T$ for $\omega \to 0$, so a coloured bath reproduces the classical thermal field in the low-frequency limit. The coloured baths use the global \textit{sim:temperature}; material temperatures and temperature rescaling apply to the classical thermal field only.
 
+{\zicf quantum:noise-type = exclusive string [default classical]}\phantomsection\addcontentsline{toc}{subsection}{quantum:noise-type}
+Selects the spectral density of the thermal noise. Available options are \textit{classical}, \textit{quantum} and \textit{quantum-no-zero}. This is the only keyword that activates the module for the llg-heun and spin-lattice integrators; with \textit{classical} these integrators run unchanged.
+
+{\zicf quantum:noise-generator = exclusive string [default on-the-fly]}\phantomsection\addcontentsline{toc}{subsection}{quantum:noise-generator}
+Selects how the coloured noise is generated. \textit{on-the-fly} propagates a set of auxiliary Ornstein-Uhlenbeck modes for every spin at each time step and follows changes of the temperature during the simulation. \textit{pre-generated} shapes white noise in frequency space with a fast Fourier transform, which is cheaper per step but needs memory proportional to the number of atoms times the window length, freezes the spectrum at the initial temperature, and requires a program with a fixed run length.
+
+{\zicf quantum:bath-modes = integer [default 30]}\phantomsection\addcontentsline{toc}{subsection}{quantum:bath-modes}
+Number of auxiliary modes per spin and component for the on-the-fly generator. More modes reproduce the target spectrum over a wider frequency range at a proportionally higher cost per step.
+
+{\zicf quantum:bath-scan-resolution = integer [default 50]}\phantomsection\addcontentsline{toc}{subsection}{quantum:bath-scan-resolution}
+Number of grid points per axis used when the rate window of the quantum-no-zero on-the-fly bath is fitted to the target spectrum at the start of the simulation.
+
+{\zicf quantum:bath-scan-omega-points = integer [default 500]}\phantomsection\addcontentsline{toc}{subsection}{quantum:bath-scan-omega-points}
+Number of frequency points at which the target spectrum is evaluated during that fit.
+
+{\zicf quantum:bath-scan-decades = float [default 3.5]}\phantomsection\addcontentsline{toc}{subsection}{quantum:bath-scan-decades}
+Half-width in decades of the search box around the thermal frequency $k_B T/\hbar$ used by that fit.
+
+{\zicf quantum:noise-window-size = integer [default 0]}\phantomsection\addcontentsline{toc}{subsection}{quantum:noise-window-size}
+Number of time steps covered by one window of the pre-generated generator. The default of 0 covers the whole run with a single window; a smaller window reduces the memory footprint, and the log file reports the actual window length and buffer size. Consecutive windows are generated with the overlap-save method, so the spectrum is continuous across window boundaries.
+
+{\zicf quantum:noise-interpolation-factor = integer [default 1]}\phantomsection\addcontentsline{toc}{subsection}{quantum:noise-interpolation-factor}
+Number of time steps per generated sample of the pre-generated generator. Values above 1 interpolate linearly between coarse samples and reduce the memory footprint by the same factor, at the cost of the spectrum above the coarse Nyquist frequency.
+
+{\zicf quantum:export-noise = string [default quantum-noise.dat]}\phantomsection\addcontentsline{toc}{subsection}{quantum:export-noise}
+Writes the noise seen by one atom at every time step to the given file, with the time in seconds and the three Cartesian components. For the open-system LLG this is the auxiliary oscillator coordinate, for the other integrators the bath sample added to the effective field. The keyword may be given without a value to use the default file name.
+
+{\zicf quantum:export-noise-atom = integer [default 0]}\phantomsection\addcontentsline{toc}{subsection}{quantum:export-noise-atom}
+Index of the atom whose noise is exported.
+
+The following spellings from earlier versions are still accepted and produce a note in the log file: \textit{sim:integrator = llg-heun-quantum} (llg-heun with a quantum spectrum), \textit{quantum:heun-noise-type}, \textit{quantum:llg-method = llg-ho | llg-fft} (\textit{quantum:noise-generator = on-the-fly | pre-generated}), \textit{quantum:heun-export-noise}, \textit{quantum:heun-export-noise-atom}, \textit{spin-lattice:noise-type}, \textit{spin-lattice:export-noise} and \textit{spin-lattice:export-noise-atom}.
 
 \section*{Data output}
 \phantomsection\addcontentsline{toc}{section}{Data output}

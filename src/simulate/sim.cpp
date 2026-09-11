@@ -157,7 +157,6 @@ namespace sim{
 
 	int system_simulation_flags;
 	int hamiltonian_simulation_flags[10];
-	int noise_type=0;
 
 	bool local_temperature=false; /// flag to enable material specific temperature
 	bool local_applied_field=false; /// flag to enable material specific applied field
@@ -679,6 +678,7 @@ void integrate_serial(uint64_t n_steps){
    // Case statement to call integrator
    switch(sim::integrator){
 
+      case sim::llg_heun_quantum: // deprecated alias of llg-heun with a quantum bath
       case 0: // LLG Heun
          for(uint64_t ti=0;ti<n_steps;ti++){
             // Optionally select GPU accelerated version
@@ -769,13 +769,6 @@ void integrate_serial(uint64_t n_steps){
 			}
 			break;
 
-		case sim::llg_heun_quantum: // Heun LLG with quantum colored noise
-			for(uint64_t ti=0;ti<n_steps;ti++){
-				sim::LLG_Heun_quantum();
-				sim::internal::increment_time();
-			}
-			break;
-
 		default:{
 			std::cerr << "Unknown integrator type "<< sim::integrator << " requested, exiting" << std::endl;
          err::vexit();
@@ -823,6 +816,7 @@ int integrate_mpi(uint64_t n_steps){
 
 	// Case statement to call integrator
 	switch(sim::integrator){
+		case sim::llg_heun_quantum: // deprecated alias of llg-heun with a quantum bath
 		case 0: // LLG Heun
 			for(uint64_t ti=0;ti<n_steps;ti++){
 			#ifdef MPICF
@@ -954,15 +948,6 @@ int integrate_mpi(uint64_t n_steps){
  				sim::internal::increment_time();
  			}
  			break;
-
-		case sim::llg_heun_quantum: // Heun LLG with quantum colored noise
-			for(uint64_t ti=0;ti<n_steps;ti++){
-				#ifdef MPICF
-				sim::LLG_Heun_quantum_mpi();
-				#endif
-				sim::internal::increment_time();
-			}
-			break;
 
 		default:{
 			terminaltextcolor(RED);

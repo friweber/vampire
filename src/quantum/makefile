@@ -1,21 +1,20 @@
 #--------------------------------------------------------------
-#          Makefile for quantum module
+#                 Makefile for quantum module
 #--------------------------------------------------------------
 
 # List module object filenames
-quantum_objects =\
+quantum_objects=\
+bath.o \
+bath_fft.o \
+bath_log.o \
+bath_ou.o \
 data.o \
+export.o \
 initialize.o \
 interface.o \
-noise_fft.o \
 llg.o \
-llg-FFT-serial.o \
-llg-FFT-mpi.o \
-llg-HO-serial.o \
-llg-HO-mpi.o \
-RK4.o \
-noise_ho.o \
-noise_sld.o
+llg_mpi.o \
+llg_serial.o
 
 # Append module objects to global tree
 OBJECTS+=$(addprefix obj/quantum/,$(quantum_objects))

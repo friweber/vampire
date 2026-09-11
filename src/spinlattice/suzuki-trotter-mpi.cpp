@@ -174,33 +174,9 @@ void suzuki_trotter_step_parallel(std::vector<double> &x_spin_array,
          generate (Fy_th.begin(),Fy_th.end(), mtrandom::gaussian);
          generate (Fz_th.begin(),Fz_th.end(), mtrandom::gaussian);
 
-         // Generate quantum noise for spin and phonon subsystems (one draw per step, reused)
-         if (sld::internal::quantum_noise_type != sld::internal::sld_classical) {
-            const int total_atoms = vmpi::num_core_atoms + vmpi::num_bdry_atoms;
-            quantum::sld_noise::generate(total_atoms);
-         }
-
-         // Diagnostic: append the injected noise (spin field + lattice force, x) for one
-         // atom to noise.dat. Only rank 0 writes, sampling its local atom (default 0).
-         if (sld::internal::export_noise && vmpi::my_rank == 0) {
-            const int a = sld::internal::export_noise_atom;
-            const int total_atoms = vmpi::num_core_atoms + vmpi::num_bdry_atoms;
-            if (a >= 0 && a < total_atoms) {
-               if (sld::internal::quantum_noise_type == sld::internal::sld_classical) {
-                  const int imat = atoms::type_array[a];
-                  const bool eq = (sim::time < sim::equilibration_time);
-                  const double spin_noise = (eq ? mp::material[imat].H_th_sigma_eq
-                                                : mp::material[imat].H_th_sigma) * sqrt(sim::temperature);
-                  const double velo_noise = (eq ? sld::internal::mp[imat].F_th_sigma_eq.get()
-                                                : sld::internal::mp[imat].F_th_sigma.get()) * sqrt(sim::temperature);
-                  sld::internal::write_noise_sample(sim::time * mp::dt_SI,
-                                                    spin_noise * Hx_th[a],
-                                                    velo_noise * Fx_th[a]);
-               } else {
-                  quantum::sld_noise::export_spin_noise_step(sim::time * mp::dt_SI);
-               }
-            }
-         }
+         // coloured noise from the quantum module: one draw per step, held fixed
+         // across all spin and velocity sub-updates below
+         if(quantum::enabled()) quantum::generate();
 
    //int indx_start, indx_end;
    //int number_at=0;
@@ -562,14 +538,14 @@ void suzuki_trotter_step_parallel(std::vector<double> &x_spin_array,
                 }
 
                  double mpi_pnx1, mpi_pny1, mpi_pnz1;
-                 if (sld::internal::quantum_noise_type == sld::internal::sld_classical) {
+                 if (!quantum::enabled()) {
                     mpi_pnx1 = velo_noise * Fx_th[atom];
                     mpi_pny1 = velo_noise * Fy_th[atom];
                     mpi_pnz1 = velo_noise * Fz_th[atom];
                  } else {
-                    mpi_pnx1 = quantum::sld_noise::phonon(atom,0);
-                    mpi_pny1 = quantum::sld_noise::phonon(atom,1);
-                    mpi_pnz1 = quantum::sld_noise::phonon(atom,2);
+                    mpi_pnx1 = quantum::lattice_field(atom,0);
+                    mpi_pny1 = quantum::lattice_field(atom,1);
+                    mpi_pnz1 = quantum::lattice_field(atom,2);
                  }
                  atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*mpi_pnx1;
                  atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*mpi_pny1;
@@ -646,14 +622,14 @@ void suzuki_trotter_step_parallel(std::vector<double> &x_spin_array,
                    }
 
                    double mpi_pnx2, mpi_pny2, mpi_pnz2;
-                   if (sld::internal::quantum_noise_type == sld::internal::sld_classical) {
+                   if (!quantum::enabled()) {
                       mpi_pnx2 = velo_noise * Fx_th[atom];
                       mpi_pny2 = velo_noise * Fy_th[atom];
                       mpi_pnz2 = velo_noise * Fz_th[atom];
                    } else {
-                      mpi_pnx2 = quantum::sld_noise::phonon(atom,0);
-                      mpi_pny2 = quantum::sld_noise::phonon(atom,1);
-                      mpi_pnz2 = quantum::sld_noise::phonon(atom,2);
+                      mpi_pnx2 = quantum::lattice_field(atom,0);
+                      mpi_pny2 = quantum::lattice_field(atom,1);
+                      mpi_pnz2 = quantum::lattice_field(atom,2);
                    }
                    atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*mpi_pnx2;
                    atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*mpi_pny2;
@@ -745,14 +721,14 @@ void suzuki_trotter_step_parallel(std::vector<double> &x_spin_array,
                  }
 
               double mpi_pnx3, mpi_pny3, mpi_pnz3;
-              if (sld::internal::quantum_noise_type == sld::internal::sld_classical) {
+              if (!quantum::enabled()) {
                  mpi_pnx3 = velo_noise * Fx_th[atom];
                  mpi_pny3 = velo_noise * Fy_th[atom];
                  mpi_pnz3 = velo_noise * Fz_th[atom];
               } else {
-                 mpi_pnx3 = quantum::sld_noise::phonon(atom,0);
-                 mpi_pny3 = quantum::sld_noise::phonon(atom,1);
-                 mpi_pnz3 = quantum::sld_noise::phonon(atom,2);
+                 mpi_pnx3 = quantum::lattice_field(atom,0);
+                 mpi_pny3 = quantum::lattice_field(atom,1);
+                 mpi_pnz3 = quantum::lattice_field(atom,2);
               }
               atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*mpi_pnx3;
               atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*mpi_pny3;
@@ -820,14 +796,14 @@ void suzuki_trotter_step_parallel(std::vector<double> &x_spin_array,
                        }
 
               double mpi_pnx4, mpi_pny4, mpi_pnz4;
-              if (sld::internal::quantum_noise_type == sld::internal::sld_classical) {
+              if (!quantum::enabled()) {
                  mpi_pnx4 = velo_noise * Fx_th[atom];
                  mpi_pny4 = velo_noise * Fy_th[atom];
                  mpi_pnz4 = velo_noise * Fz_th[atom];
               } else {
-                 mpi_pnx4 = quantum::sld_noise::phonon(atom,0);
-                 mpi_pny4 = quantum::sld_noise::phonon(atom,1);
-                 mpi_pnz4 = quantum::sld_noise::phonon(atom,2);
+                 mpi_pnx4 = quantum::lattice_field(atom,0);
+                 mpi_pny4 = quantum::lattice_field(atom,1);
+                 mpi_pnz4 = quantum::lattice_field(atom,2);
               }
               atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*mpi_pnx4;
               atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*mpi_pny4;

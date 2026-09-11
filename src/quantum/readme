@@ -1,0 +1,135 @@
+//------------------------------------------------------------------------------
+//
+//   VAMPIRE quantum module
+//
+//------------------------------------------------------------------------------
+//
+//   The module supplies thermal noise with a quantum spectral density to the
+//   spin dynamics, either as the open-system LLG (a spin coupled to an
+//   auxiliary oscillator with a Lorentzian response) or as a coloured
+//   replacement for the classical white thermal field of another integrator.
+//
+//   Modes
+//   -----
+//   sim:integrator selects the consumer, quantum:noise-type the spectrum:
+//
+//     llg-quantum        open-system LLG, integrated by this module. Any
+//                        spectrum, including classical (the classical
+//                        open-system model). Needs the material parameters
+//                        quantum-lorentzian-width and
+//                        quantum-lorentzian-central-frequency.
+//     llg-heun           coloured spin bath added to the effective field when
+//                        the spectrum is not classical; otherwise the stock
+//                        integrator with sim::calculate_thermal_fields() runs
+//                        untouched.
+//     spin-lattice       coloured spin bath and coloured lattice (force) bath
+//                        when the spectrum is not classical.
+//
+//   Spectra
+//   -------
+//   With T the reduced temperature (kB T/hbar in the bath's frequency unit)
+//
+//     classical          S(w) = 2T
+//     quantum            S(w) = w coth(w/2T)             (with zero-point term)
+//     quantum-no-zero    S(w) = w (coth(w/2T) - 1)       (without zero-point term)
+//
+//   All three tend to 2T for w -> 0, so a coloured bath reproduces the
+//   classical white noise in that limit and the amplitudes below are fixed
+//   by requiring exactly that.
+//
+//   Generators
+//   ----------
+//   on-the-fly (default): auxiliary Ornstein-Uhlenbeck modes per site and
+//     component, one exact update per step. quantum uses n_bath_modes
+//     Matsubara modes at 2 pi n T plus a white zero mode; quantum-no-zero
+//     uses n_bath_modes log-spaced modes whose rate window is fitted once at
+//     start (a grid scan against the target spectrum, see bath_log.cpp) and
+//     whose amplitudes follow the temperature afterwards. Works with programs
+//     that change the temperature.
+//
+//   pre-generated: white noise shaped in frequency space by sqrt(S(w)),
+//     and for the thermostat by the Lorentzian as well, then read back with
+//     linear interpolation. Generation is windowed (overlap-save, six
+//     segments per transform of which four are kept). With no
+//     quantum:noise-window-size the whole run is covered by one window,
+//     which costs an FFT length of 6/4 of the run and a buffer of
+//     3*atoms*(4/6 + 2/6)*n_coarse doubles; the module refuses above 8 GiB
+//     and asks for a window size instead. The spectrum is frozen at the
+//     starting temperature, so programs that change the temperature are
+//     refused. The first window is generated at the first step, after the
+//     random number generator has been seeded, so sim:integrator-random-seed
+//     applies to it.
+//
+//   Amplitudes
+//   ----------
+//   The baths deliver unit-variance samples; the consumer's amplitude is
+//   applied on output, per material:
+//
+//     thermostat, on-the-fly     sqrt(gamma A/S0),  A = alpha omega0^4/gamma,
+//                                S0 = mu_s/(hbar gamma_e); the oscillator
+//                                filters the bath
+//     thermostat, pre-generated  1/sqrt(S0); the Lorentzian is in the filter
+//     llg-heun                   H_th_sigma sqrt(dt hbar gamma_e/2kB)
+//     spin-lattice, spin         the same, with H_th_sigma_eq during
+//                                equilibration
+//     spin-lattice, lattice      sqrt(eta hbar/m) in eV, ps and A, with
+//                                eq_damp_lat during equilibration; the bath
+//                                runs at the lattice step dt_SI in ps and
+//                                the temperature scale kB/hbar in 1/ps
+//
+//   Coloured baths use sim:temperature. Material temperatures and
+//   temperature rescaling are corrections to the classical model and stay
+//   with the classical thermal field; the module says so in the log when
+//   they are set.
+//
+//   Checkpoints hold spins, velocities and the random number generator, not
+//   the bath state: a restarted coloured run begins with a cold bath and a
+//   short transient.
+//
+//   Keywords
+//   --------
+//   quantum:noise-type              classical | quantum | quantum-no-zero
+//   quantum:noise-generator         on-the-fly | pre-generated
+//   quantum:noise-window-size       fine steps per window (0 = whole run)
+//   quantum:noise-interpolation-factor  fine steps per coarse sample
+//   quantum:bath-modes              modes per site (default 30)
+//   quantum:bath-scan-resolution    grid points per axis of the log-bath fit
+//   quantum:bath-scan-omega-points  frequency points of the log-bath fit
+//   quantum:bath-scan-decades       width of the log-bath search box
+//   quantum:export-noise [= file]   write the noise seen by one atom
+//   quantum:export-noise-atom       which atom (default 0)
+//   material:quantum-lorentzian-width              Gamma, reduced units
+//   material:quantum-lorentzian-central-frequency  omega0, reduced units
+//
+//   Deprecated spellings, still accepted with a note in the log:
+//   sim:integrator = llg-heun-quantum (llg-heun; spectrum defaults to
+//   quantum), quantum:heun-noise-type, quantum:llg-method = llg-ho | llg-fft,
+//   quantum:heun-export-noise[-atom], spin-lattice:noise-type,
+//   spin-lattice:export-noise[-atom], and the values quantum-fft /
+//   quantum-no-zero-fft for noise-type.
+//
+//   Files
+//   -----
+//   internal.hpp    types (bath_t, fft_t), shared variables, declarations
+//   data.cpp        definitions and defaults
+//   interface.cpp   keywords
+//   initialize.cpp  mode decision, amplitudes, run length, banner, cleanup
+//   bath.cpp        bath setup, temperature refresh, per-step draw; public
+//                   enabled/generate/field/add_field/lattice_field
+//   bath_ou.cpp     Matsubara Ornstein-Uhlenbeck generator
+//   bath_log.cpp    log-spaced Ornstein-Uhlenbeck generator and its fit
+//   bath_fft.cpp    pre-generated (overlap-save FFT) generator
+//   export.cpp      noise export
+//   llg_atom.hpp    per-atom arithmetic shared by the CPU steppers and a
+//                   future GPU kernel: equations of motion, RK4 stages,
+//                   one-site bath updates
+//   llg.cpp         stepper dispatch, RK4 range helpers, thermostat storage
+//   llg_serial.cpp  serial steppers for on-the-fly and pre-generated noise
+//   llg_mpi.cpp     the same with halo swaps
+//
+//   References
+//   ----------
+//   J. Barker and G. E. W. Bauer, Phys. Rev. B 100, 140401(R) (2019)
+//   https://doi.org/10.21105/joss.06263
+//
+//------------------------------------------------------------------------------

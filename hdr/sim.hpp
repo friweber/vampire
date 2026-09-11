@@ -78,7 +78,7 @@ namespace sim{
 	enum integrator_t{ llg_heun = 0, monte_carlo = 1, llg_midpoint = 2,
 							 cmc = 3, hybrid_cmc = 4, llg_quantum = 5, lsf = 6,
 							 lsf_mc = 7, lsf_rk4 = 8, suzuki_trotter = 9,
-							 llg_heun_quantum = 10};
+							 llg_heun_quantum = 10}; // llg_heun_quantum: deprecated alias of llg_heun with quantum noise
 
 	extern std::ofstream mag_file;
 	extern uint64_t time;
@@ -161,7 +161,6 @@ namespace sim{
 	extern int system_simulation_flags;
 	extern int hamiltonian_simulation_flags[10];
 
-	extern int noise_type;
 
 	extern integrator_t integrator; // variable to specify integrator
 	extern int program;
@@ -200,14 +199,11 @@ namespace sim{
 	extern int LLG_Heun();
 	extern int LLG_Heun_mpi();
 	extern int LLG_Heun_cuda();
-	extern int LLG_Heun_quantum();
-	extern int LLG_Heun_quantum_mpi();
 	extern int LLG_Midpoint();
 	extern int LLG_Midpoint_mpi();
 	extern int LLG_Midpoint_cuda();
 	extern int LSF_mpi();
 	extern int LSF_RK4_mpi();
-	extern int llg_quantum_mpi_step();
 
 	// Integrator initialisers
 	extern int LLGinit();
