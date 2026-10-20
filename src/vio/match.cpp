@@ -35,6 +35,7 @@
 #include "micromagnetic.hpp"
 #include "montecarlo.hpp"
 #include "program.hpp"
+#include "quantum.hpp"
 #include "sim.hpp"
 #include "sld.hpp"
 #include "spininitialize.hpp"
@@ -84,6 +85,7 @@ namespace vin{
       else if(micromagnetic::match_input_parameter(key, word, value, unit, line)) return EXIT_SUCCESS;
       else if(environment::match_input_parameter(key, word, value, unit, line)) return EXIT_SUCCESS;
       else if(hamr::match_input_parameter(key, word, value, unit, line)) return EXIT_SUCCESS;
+      else if(quantum::match_input_parameter(key, word, value, unit, line)) return EXIT_SUCCESS;
       else if(sld::match_input_parameter(key, word, value, unit, line)) return EXIT_SUCCESS;
       else if(spininitialize::match_input_parameter(key, word, value, unit, line)) return EXIT_SUCCESS;
       else if(spinwaves::match_input_parameter(key, word, value, unit, line)) return EXIT_SUCCESS; // JRH spinwaves input parameters

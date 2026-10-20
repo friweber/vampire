@@ -31,6 +31,7 @@
 
 // Internal header
 #include "internal.hpp"
+#include "quantum.hpp"
 
 
 
@@ -173,6 +174,10 @@ void suzuki_trotter_step_parallel(std::vector<double> &x_spin_array,
          generate (Fx_th.begin(),Fx_th.end(), mtrandom::gaussian);
          generate (Fy_th.begin(),Fy_th.end(), mtrandom::gaussian);
          generate (Fz_th.begin(),Fz_th.end(), mtrandom::gaussian);
+
+         // coloured noise from the quantum module: one draw per step, held fixed
+         // across all spin and velocity sub-updates below
+         if(quantum::enabled()) quantum::generate();
 
    //int indx_start, indx_end;
    //int number_at=0;
@@ -533,9 +538,19 @@ void suzuki_trotter_step_parallel(std::vector<double> &x_spin_array,
                       velo_noise=sld::internal::mp[imat].F_th_sigma_eq.get()*sqrt(sim::temperature);
                 }
 
-                 atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*velo_noise*Fx_th[atom];
-                 atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*velo_noise*Fy_th[atom];
-                 atoms::z_velo_array[atom] =  f_eta*atoms::z_velo_array[atom] + dt2_m * sld::internal::forces_array_z[atom]+dt2*velo_noise*Fz_th[atom];
+                 double mpi_pnx1, mpi_pny1, mpi_pnz1;
+                 if (!quantum::enabled()) {
+                    mpi_pnx1 = velo_noise * Fx_th[atom];
+                    mpi_pny1 = velo_noise * Fy_th[atom];
+                    mpi_pnz1 = velo_noise * Fz_th[atom];
+                 } else {
+                    mpi_pnx1 = quantum::lattice_field(atom,0);
+                    mpi_pny1 = quantum::lattice_field(atom,1);
+                    mpi_pnz1 = quantum::lattice_field(atom,2);
+                 }
+                 atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*mpi_pnx1;
+                 atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*mpi_pny1;
+                 atoms::z_velo_array[atom] =  f_eta*atoms::z_velo_array[atom] + dt2_m * sld::internal::forces_array_z[atom]+dt2*mpi_pnz1;
 
                  sld::internal::x_coord_storage_array[atom] +=  mp::dt_SI*1e12 * atoms::x_velo_array[atom];
                  sld::internal::y_coord_storage_array[atom] +=  mp::dt_SI*1e12 * atoms::y_velo_array[atom];
@@ -607,9 +622,19 @@ void suzuki_trotter_step_parallel(std::vector<double> &x_spin_array,
                          velo_noise=sld::internal::mp[imat].F_th_sigma_eq.get()*sqrt(sim::temperature);
                    }
 
-                   atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*velo_noise*Fx_th[atom];
-                   atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*velo_noise*Fy_th[atom];
-                   atoms::z_velo_array[atom] =  f_eta*atoms::z_velo_array[atom] + dt2_m * sld::internal::forces_array_z[atom]+dt2*velo_noise*Fz_th[atom];
+                   double mpi_pnx2, mpi_pny2, mpi_pnz2;
+                   if (!quantum::enabled()) {
+                      mpi_pnx2 = velo_noise * Fx_th[atom];
+                      mpi_pny2 = velo_noise * Fy_th[atom];
+                      mpi_pnz2 = velo_noise * Fz_th[atom];
+                   } else {
+                      mpi_pnx2 = quantum::lattice_field(atom,0);
+                      mpi_pny2 = quantum::lattice_field(atom,1);
+                      mpi_pnz2 = quantum::lattice_field(atom,2);
+                   }
+                   atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*mpi_pnx2;
+                   atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*mpi_pny2;
+                   atoms::z_velo_array[atom] =  f_eta*atoms::z_velo_array[atom] + dt2_m * sld::internal::forces_array_z[atom]+dt2*mpi_pnz2;
 
 
                   sld::internal::x_coord_storage_array[atom] +=  mp::dt_SI*1e12 * atoms::x_velo_array[atom];
@@ -696,9 +721,19 @@ void suzuki_trotter_step_parallel(std::vector<double> &x_spin_array,
                        velo_noise=sld::internal::mp[imat].F_th_sigma_eq.get()*sqrt(sim::temperature);
                  }
 
-              atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*velo_noise*Fx_th[atom];
-              atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*velo_noise*Fy_th[atom];
-              atoms::z_velo_array[atom] =  f_eta*atoms::z_velo_array[atom] + dt2_m * sld::internal::forces_array_z[atom]+dt2*velo_noise*Fz_th[atom];
+              double mpi_pnx3, mpi_pny3, mpi_pnz3;
+              if (!quantum::enabled()) {
+                 mpi_pnx3 = velo_noise * Fx_th[atom];
+                 mpi_pny3 = velo_noise * Fy_th[atom];
+                 mpi_pnz3 = velo_noise * Fz_th[atom];
+              } else {
+                 mpi_pnx3 = quantum::lattice_field(atom,0);
+                 mpi_pny3 = quantum::lattice_field(atom,1);
+                 mpi_pnz3 = quantum::lattice_field(atom,2);
+              }
+              atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*mpi_pnx3;
+              atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*mpi_pny3;
+              atoms::z_velo_array[atom] =  f_eta*atoms::z_velo_array[atom] + dt2_m * sld::internal::forces_array_z[atom]+dt2*mpi_pnz3;
 
 
            }
@@ -761,9 +796,19 @@ void suzuki_trotter_step_parallel(std::vector<double> &x_spin_array,
                        velo_noise=sld::internal::mp[imat].F_th_sigma_eq.get()*sqrt(sim::temperature);
                        }
 
-              atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*velo_noise*Fx_th[atom];
-              atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*velo_noise*Fy_th[atom];
-              atoms::z_velo_array[atom] =  f_eta*atoms::z_velo_array[atom] + dt2_m * sld::internal::forces_array_z[atom]+dt2*velo_noise*Fz_th[atom];
+              double mpi_pnx4, mpi_pny4, mpi_pnz4;
+              if (!quantum::enabled()) {
+                 mpi_pnx4 = velo_noise * Fx_th[atom];
+                 mpi_pny4 = velo_noise * Fy_th[atom];
+                 mpi_pnz4 = velo_noise * Fz_th[atom];
+              } else {
+                 mpi_pnx4 = quantum::lattice_field(atom,0);
+                 mpi_pny4 = quantum::lattice_field(atom,1);
+                 mpi_pnz4 = quantum::lattice_field(atom,2);
+              }
+              atoms::x_velo_array[atom] =  f_eta*atoms::x_velo_array[atom] + dt2_m * sld::internal::forces_array_x[atom]+dt2*mpi_pnx4;
+              atoms::y_velo_array[atom] =  f_eta*atoms::y_velo_array[atom] + dt2_m * sld::internal::forces_array_y[atom]+dt2*mpi_pny4;
+              atoms::z_velo_array[atom] =  f_eta*atoms::z_velo_array[atom] + dt2_m * sld::internal::forces_array_z[atom]+dt2*mpi_pnz4;
 
 
             }

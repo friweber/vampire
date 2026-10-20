@@ -19,6 +19,8 @@
 #include "neighbours.hpp"
 #include "material.hpp"
 #include "constants.hpp"
+#include "quantum.hpp"
+#include "sim.hpp"
 
 // sld module headers
 #include "internal.hpp"
@@ -32,6 +34,11 @@ namespace sld{
 
       // check for sld module being enabled
       if(!sld::enabled) return;
+
+      // Ensure mp has at least num_materials entries (may be absent when only
+      // spin-lattice:noise-type or spin-lattice:export-noise was set).
+      if (sld::internal::mp.size() < static_cast<size_t>(mp::num_materials))
+         sld::internal::mp.resize(mp::num_materials);
 
       std::cout<<"Input parameters for Spin-lattice dynamics simulations:"<<std::endl;
       std::cout<<"*******************************************************"<<std::endl;
@@ -87,6 +94,20 @@ namespace sld{
 
     //initialise exchange, coupling parameters
      sld::internal::initialise_sld_parameters();
+
+     // Hand the lattice parameters to the quantum module, which builds a
+     // lattice bath from them if a coloured noise type was requested.
+     {
+        std::vector<double> mass(mp::num_materials);
+        std::vector<double> damping(mp::num_materials);
+        std::vector<double> damping_eq(mp::num_materials);
+        for(int mat = 0; mat < mp::num_materials; mat++){
+           mass[mat] = sld::internal::mp[mat].mass.get();
+           damping[mat] = sld::internal::mp[mat].damp_lat.get();
+           damping_eq[mat] = sld::internal::mp[mat].eq_damp_lat.get();
+        }
+        quantum::set_lattice_parameters(mass, damping, damping_eq);
+     }
 
      //for the morse potential:
 

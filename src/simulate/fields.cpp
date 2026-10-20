@@ -27,6 +27,7 @@
 #include "ltmp.hpp"
 #include "montecarlo.hpp"
 #include "program.hpp"
+#include "quantum.hpp"
 #include "random.hpp"
 #include "sim.hpp"
 #include "spintorque.hpp"
@@ -343,6 +344,13 @@ int calculate_thermal_fields(const int start_index,const int end_index){
 
    // check calling of routine if error checking is activated
    if(err::check==true){std::cout << "calculate_thermal_fields has been called" << std::endl;}
+
+   // coloured (quantum) noise: the quantum module drew this step's sample at
+   // the start of the step and supplies it in place of the white thermal field
+   if(quantum::enabled()){
+      quantum::thermal_fields(start_index, end_index);
+      return EXIT_SUCCESS;
+   }
 
    // unroll sigma for speed
    std::vector<double> sigma_prefactor(0);

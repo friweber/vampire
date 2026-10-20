@@ -27,6 +27,7 @@
 #include "material.hpp"
 #include "micromagnetic.hpp"
 #include "montecarlo.hpp"
+#include "quantum.hpp"
 #include "sim.hpp"
 #include "sld.hpp"
 #include "vio.hpp"
@@ -96,6 +97,8 @@ void integrate_serial(uint64_t n_steps){
 
       case integrator_t::llg_heun: // LLG Heun
          for(uint64_t ti=0;ti<n_steps;ti++){
+            // Draw this step's coloured noise (quantum module, if enabled)
+            quantum::generate();
             // Optionally select GPU accelerated version
             if(gpu::acceleration) gpu::llg_heun();
             // Otherwise use CPU version
@@ -145,9 +148,9 @@ void integrate_serial(uint64_t n_steps){
          }
          break;
 
-      case integrator_t::llg_quantum: // LLG quantum noise
+      case integrator_t::llg_quantum: // open-system LLG with quantum noise (quantum module)
          for(uint64_t ti=0;ti<n_steps;ti++){
-            internal::llg_quantum_step();
+            quantum::llg();
             // increment time
             internal::increment_time();
          }
@@ -259,6 +262,8 @@ int integrate_mpi(uint64_t n_steps){
             #ifdef CUDA
                //sim::LLG_Heun_cuda_mpi();
             #else
+               // Draw this step's coloured noise (quantum module, if enabled)
+               quantum::generate();
                internal::LLG_Heun_mpi();
                //calcualte the field from the environment
                if (environment::enabled &&  (sim::time)%environment::num_atomic_steps_env ==0)
@@ -270,6 +275,14 @@ int integrate_mpi(uint64_t n_steps){
                                     mp::dt);
             #endif
          #endif
+            // increment time
+            internal::increment_time();
+         }
+         break;
+
+      case integrator_t::llg_quantum: // open-system LLG with quantum noise (quantum module)
+         for(uint64_t ti=0;ti<n_steps;ti++){
+            quantum::llg();
             // increment time
             internal::increment_time();
          }

@@ -21,6 +21,7 @@
 #include "spinwaves.hpp" // jrh
 #include "ltmp.hpp"
 #include "program.hpp"
+#include "quantum.hpp"
 #include "sim.hpp"
 #include "spintorque.hpp"
 #include "spintransport.hpp"
@@ -175,6 +176,12 @@ void initialize_modules(){
                          atoms::y_coord_array,
                          atoms::z_coord_array
                   );
+
+   //---------------------------------------------------------------------------
+   // initialise quantum noise (after sld::initialize(), which hands over the
+   // lattice parameters)
+   //---------------------------------------------------------------------------
+   quantum::initialize();
 
    return;
 

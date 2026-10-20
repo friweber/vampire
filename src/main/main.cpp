@@ -18,6 +18,7 @@
 #include "errors.hpp"
 #include "info.hpp"
 #include "material.hpp"
+#include "quantum.hpp"
 #include "sim.hpp"
 #include "vmpi.hpp"
 #include "vio.hpp"
@@ -108,6 +109,9 @@ int main(int argc, char* argv[]){
 
    // Simulate system
    sim::run();
+
+   // Release persistent resources of the quantum noise module (FFTW plans)
+   quantum::cleanup();
 
    // Finalise MPI
    #ifdef MPICF

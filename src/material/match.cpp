@@ -28,6 +28,7 @@
 #include "micromagnetic.hpp"
 #include "montecarlo.hpp"
 #include "program.hpp"
+#include "quantum.hpp"
 #include "sim.hpp"
 #include "sld.hpp"
 #include "spininitialize.hpp"
@@ -80,6 +81,7 @@ namespace internal{
       else if(unitcell::match_material_parameter(word, value, unit, line, super_index, sub_index)) return EXIT_SUCCESS;
       else if(micromagnetic::match_material_parameter(word, value, unit, line, super_index, sub_index)) return EXIT_SUCCESS;
       else if(environment::match_material_parameter(word, value, unit, line, super_index, sub_index)) return EXIT_SUCCESS;
+      else if(quantum::match_material_parameter(word, value, unit, line, super_index, sub_index)) return EXIT_SUCCESS;
       else if(sld::match_material_parameter(word, value, unit, line, super_index, sub_index)) return EXIT_SUCCESS;
       else if(spininitialize::match_material_parameter(word, value, unit, line, super_index, sub_index)) return EXIT_SUCCESS;
       else if(spinwaves::match_material_parameter(word, value, unit, line, super_index, sub_index)) return EXIT_SUCCESS;

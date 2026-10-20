@@ -221,10 +221,6 @@ namespace integrate{
       int LLG_Midpoint_mpi();
       int LLG_Midpoint_cuda();
 
-      // LLG integrator with quantum thermostat
-      int LLGQinit();
-      void llg_quantum_step();
-
       // rotation based LLG integrators (ported from JAMS)
       void initialize_rotation_integrators();
       int LLG_rotation_init();

@@ -11,7 +11,7 @@
 LIBS=
 FFTW=
 
-# Uncomment these to add FFTW for spin waves and FFT dipole
+# Uncomment these to add FFTW for spin waves, FFT dipole and pre-generated quantum noise
 #LIBS= -lm -lfftw3 -L/opt/local/lib/
 #FFTW= -DFFT -I/opt/local/include/
 
@@ -119,6 +119,7 @@ include src/mpi/makefile
 include src/neighbours/makefile
 include src/random/makefile
 include src/program/makefile
+include src/quantum/makefile
 include src/simulate/makefile
 include src/spininitialize/makefile
 include src/spinlattice/makefile
