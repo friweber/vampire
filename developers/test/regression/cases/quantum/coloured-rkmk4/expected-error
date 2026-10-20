@@ -1,0 +1,1 @@
+Error - coloured quantum noise (quantum:noise-type = quantum) is supported with sim:integrator = llg-heun, llg-quantum and spin-lattice only.

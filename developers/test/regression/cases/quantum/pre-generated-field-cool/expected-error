@@ -1,0 +1,1 @@
+Error - pre-generated quantum noise is shaped once, at the starting temperature, and cannot follow a program that changes the temperature. Use quantum:noise-generator = on-the-fly.

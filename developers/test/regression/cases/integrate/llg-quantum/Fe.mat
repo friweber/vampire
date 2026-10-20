@@ -9,3 +9,5 @@ material[1]:lsf-second-order-coefficient=-1.0e-21
 material[1]:lsf-fourth-order-coefficient=0.5e-21
 material[1]:lsf-sixth-order-coefficient=0.0
 material[1]:initial-spin-direction=1,0,1
+material[1]:quantum-lorentzian-central-frequency=200.0
+material[1]:quantum-lorentzian-width=150.0
