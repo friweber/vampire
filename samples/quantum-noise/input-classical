@@ -1,0 +1,22 @@
+#------------------------------------------
+# Ni ASD with classical white noise (reference)
+#------------------------------------------
+create:crystal-structure=fcc
+create:periodic-boundaries-x
+create:periodic-boundaries-y
+create:periodic-boundaries-z
+dimensions:unit-cell-size = 3.524 !A
+dimensions:system-size-x  = 3.0   !nm
+dimensions:system-size-y  = 3.0   !nm
+dimensions:system-size-z  = 3.0   !nm
+material:file=Ni.mat
+sim:program                  = time-series
+sim:time-step                = 1e-15
+sim:equilibration-time-steps = 5000
+sim:total-time-steps         = 20000
+sim:temperature              = 300
+sim:integrator               = llg-heun
+output:output-rate           = 100
+output:real-time
+output:mean-magnetisation-length
+output:magnetisation

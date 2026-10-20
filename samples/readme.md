@@ -26,3 +26,4 @@ top-level folder first (a short benchmark, a few seconds).
 | [unitcells](unitcells) | creating a custom unit cell file (Python or C++) for a ferrimagnet | ~6 s |
 | [laser-electrical-pulse](laser-electrical-pulse) | laser pulse (two-temperature model) followed by a spin-transfer torque pulse | < 1 s |
 | [sld](sld) | spin-lattice dynamics in bcc Fe | ~40 s |
+| [quantum-noise](quantum-noise) | quantum (coloured) thermal noise: llg-heun and open-system llg-quantum in fcc Ni | minutes |

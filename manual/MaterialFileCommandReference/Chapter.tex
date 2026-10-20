@@ -358,6 +358,15 @@ The following commands are specific for the spin-lattice module and needed to in
 
 {\zicf material:harmonic-potential-V0=float [ 0-1 : default 0.15 !eV]}\phantomsection\addcontentsline{toc}{subsection}{material:exchange-J0}  prefactor for the harmonic potential for SLD module;
 
+The following parameters define the Lorentzian response of the auxiliary oscillator used by the open-system LLG integrator of the quantum module (\textit{sim:integrator = llg-quantum}). Both are entered without a unit, in the reduced frequency unit of the code $\tilde{\omega}_L = |\gamma_e| \cdot 1\,\mathrm{T} \approx 1.76 \times 10^{11}$ rad/s: a frequency $\omega$ in rad/s is entered as $\tilde{\omega} = \omega/\tilde{\omega}_L$, so that a phonon peak at $f_0$ (in THz) corresponds to $\tilde{\omega}_0 = 2\pi f_0 \times 10^{12}/\tilde{\omega}_L \approx 35.7\, f_0$. The coupling strength $A = \alpha\,\omega_0^4/\Gamma$ follows from \textit{material:damping-constant} and the spin length $S_0 = \mu_s/(\hbar |\gamma_e|)$ from \textit{material:atomic-spin-moment}, so neither is entered separately.
+
+{\zicf material:quantum-lorentzian-central-frequency = float [reduced units]}\phantomsection\addcontentsline{toc}{subsection}{material:quantum-lorentzian-central-frequency}
+Centre frequency $\tilde{\omega}_0$ of the Lorentzian, typically obtained from a fit to the phonon density of states of the material. Must be greater than zero.
+
+{\zicf material:quantum-lorentzian-width = float [reduced units]}\phantomsection\addcontentsline{toc}{subsection}{material:quantum-lorentzian-width}
+Width $\tilde{\Gamma}$ of the Lorentzian, from the same fit. Must be greater than zero. For $\omega_0 \gg \Gamma$ the oscillator is a narrow resonance; for $\Gamma \gtrsim \omega_0$ the response is broad and the model approaches the Ohmic (frequency-independent damping) limit at low frequencies.
+
+
 {\zicf material:coupling-C0=float [ 0-1 : default 0.5]}\phantomsection\addcontentsline{toc}{subsection}{material:coupling-C0}  prefactor for the coupling function for SLD module; various coupling options available such as pseudodipolar or full-neel.
 
 
