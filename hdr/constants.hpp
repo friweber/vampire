@@ -24,6 +24,7 @@ namespace constants{
    extern const double kB_eV;   // Boltzmann constant         (eV/K)
    extern const double eV;      // Elementary charge / 1 eV   (J)
    extern const double gamma_SI;// Electron gyromagnetic ratio (rad/s/T)
+   extern const double hbar;    // Reduced Planck constant    (J s)
 
    // Derived constants (computed from the fundamentals above)
    extern const double i_muB;           // 1/muB — frequently needed in MC and dipole code (J/T)^-1

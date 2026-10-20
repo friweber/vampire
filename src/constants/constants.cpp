@@ -29,6 +29,7 @@ namespace constants{
    const double kB_eV    = 8.617333262e-5;   // Boltzmann constant         (eV/K)
    const double eV       = 1.602176634e-19;  // 1 electron volt            (J)     exact
    const double gamma_SI = 1.76085963023e11; // Electron gyromagnetic ratio (rad/s/T)
+   const double hbar     = 1.054571817e-34;  // Reduced Planck constant    (J s)     exact (h/2pi)
 
    // Derived constants — computed here so the relationship to the fundamentals
    // is explicit and the values stay consistent if the fundamentals are updated.
