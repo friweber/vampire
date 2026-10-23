@@ -16,6 +16,7 @@
 
 // Vampire headers
 #include "cuda.hpp"
+#include "quantum.hpp"
 
 // Local cuda headers
 #include "cuda_utils.hpp"
@@ -210,14 +211,16 @@ namespace internal{
       }
       // Otherwise calculate global thermal field and applied fields
       else{
-         // no thermal field where the CPU has none either (sim::thermal_field_enabled
-         // is cleared by static hysteresis, CMC, LSF, Lagrange, ...)
-         if(sim::thermal_field_enabled) cu::update_global_thermal_field();
-         else{
+         // thermal field: coloured bath of the quantum module; none where the CPU
+         // has none either (sim::thermal_field_enabled is cleared by static
+         // hysteresis, CMC, LSF, Lagrange, the open-system thermostat); else white
+         if(quantum::gpu_bath()) cu::quantum_bath_fields();
+         else if(!sim::thermal_field_enabled){
             cudaMemset(cu::d_x_external_field, 0, num_atoms*sizeof(cu_real_t));
             cudaMemset(cu::d_y_external_field, 0, num_atoms*sizeof(cu_real_t));
             cudaMemset(cu::d_z_external_field, 0, num_atoms*sizeof(cu_real_t));
          }
+         else cu::update_global_thermal_field();
          cu::update_applied_fields();
       }
 

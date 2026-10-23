@@ -75,6 +75,8 @@ namespace vcuda{
 
       void update_spin_fields ();
       void update_external_fields ();
+      void quantum_bath_fields ();   // coloured thermal field of the quantum module (quantum.cu)
+      void quantum_finalize ();
       void update_dipolar_fields ();
       void update_cell_magnetizations ();
       void update_hamr_field ();
