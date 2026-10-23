@@ -29,6 +29,7 @@ namespace gpu{
    extern void initialize();
    extern void initialize_dipole();
    extern void llg_heun();
+   extern void quantum_llg(); // open-system LLG of the quantum module (llg-quantum)
    extern void finalize();
    extern void transfer_spin_positions_from_gpu_to_cpu();
    extern void transfer_dipole_fields_from_cpu_to_gpu();

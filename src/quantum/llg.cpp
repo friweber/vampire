@@ -18,6 +18,7 @@
 #include "quantum.hpp"
 
 // quantum module headers
+#include "gpu.hpp"
 #include "internal.hpp"
 #include "llg_atom.hpp"
 
@@ -25,18 +26,25 @@ namespace quantum{
 
    //---------------------------------------------------------------------------
    // Function to integrate one open-system LLG step. Selects the stepper for
-   // the build (serial or MPI) and the noise generator. A GPU stepper would
-   // be dispatched here, ahead of the CPU choice, following gpu::llg_heun().
+   // the build (serial or MPI) and the noise generator; with gpu:acceleration
+   // the CUDA stepper (gpu::quantum_llg, src/cuda/quantum.cu) runs instead.
    //---------------------------------------------------------------------------
    void llg(){
 
       using namespace internal;
 
       // first step of the run (spins final, also after a checkpoint load): oscillator to its equilibrium
+      // (on the GPU the CUDA module seeds its own copy, see src/cuda/quantum.cu)
       static bool oscillator_seeded = false;
-      if(!oscillator_seeded){
+      if(!oscillator_seeded && !gpu::acceleration){
          seed_oscillator(0, spin_bath.n_sites);
          oscillator_seeded = true;
+      }
+
+      // GPU stepper first, following gpu::llg_heun()
+      if(gpu::acceleration){
+         gpu::quantum_llg();
+         return;
       }
 
       #ifdef MPICF

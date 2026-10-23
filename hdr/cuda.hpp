@@ -23,6 +23,7 @@ namespace vcuda{
    extern bool initialize(bool cpu_stats);
    extern bool initialize_dipole();
    extern void llg_heun();
+   extern void quantum_llg(); // open-system LLG of the quantum module (src/cuda/quantum.cu)
    extern void stats_update();
    extern void finalize();
    extern void transfer_spin_positions_from_gpu_to_cpu();

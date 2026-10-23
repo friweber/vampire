@@ -10,6 +10,7 @@ finalize.o \
 initialize.o \
 interface.o \
 llg_heun.o \
+quantum_llg.o \
 monte_carlo.o \
 statistics.o \
 transfer.o \
