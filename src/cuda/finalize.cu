@@ -40,6 +40,10 @@ namespace vcuda{
       // Only compile code if CUDA enabled
 #ifdef CUDA
 
+      // spins back to the host, so that a checkpoint saved after the run holds the
+      // final state (the host copy is otherwise only as new as the last statistics update)
+      vcuda::transfer_spin_positions_from_gpu_to_cpu();
+
       vcuda::internal::__finalize ();
 
       vcuda::internal::mc::finalise();
