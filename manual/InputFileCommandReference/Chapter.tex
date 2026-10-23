@@ -859,7 +859,7 @@ The quantum module replaces the classical white thermal noise by noise with a qu
   \item[] quantum: $S(\omega) = \omega\coth(\omega/2T)$, including the zero-point fluctuations
   \item[] quantum-no-zero: $S(\omega) = \omega\left[\coth(\omega/2T)-1\right]$, without the zero-point fluctuations
 \end{itemize}
-All three tend to the classical value $2T$ for $\omega \to 0$, so a coloured bath reproduces the classical thermal field in the low-frequency limit. The coloured baths use the global \textit{sim:temperature}; material temperatures and temperature rescaling apply to the classical thermal field only.
+All three tend to the classical value $2T$ for $\omega \to 0$, so a coloured bath reproduces the classical thermal field in the low-frequency limit. The coloured baths use the global \textit{sim:temperature}; material temperatures and temperature rescaling apply to the classical thermal field only. With \textit{gpu:acceleration} (CUDA build) the on-the-fly baths of \texttt{llg-heun} and the open-system LLG run on the GPU; pre-generated noise, noise export, spin-lattice dynamics and MPI builds remain CPU-only and are refused with GPU acceleration.
 
 {\zicf quantum:noise-type = exclusive string [default classical]}\phantomsection\addcontentsline{toc}{subsection}{quantum:noise-type}
 Selects the spectral density of the thermal noise. Available options are \textit{classical}, \textit{quantum} and \textit{quantum-no-zero}. This is the only keyword that activates the module for the llg-heun and spin-lattice integrators; with \textit{classical} these integrators run unchanged.

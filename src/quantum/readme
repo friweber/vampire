@@ -28,9 +28,15 @@
 //                        when the spectrum is not classical.
 //
 //   Coloured noise is refused with the other spin dynamics integrators (the
-//   rotation integrators split the noise into two half steps per time step),
-//   with GPU acceleration, and with the hamr-simulation and
-//   localised-temperature-pulse programs, which make their own thermal field.
+//   rotation integrators split the noise into two half steps per time step)
+//   and with the hamr-simulation and localised-temperature-pulse programs,
+//   which make their own thermal field.
+//
+//   GPU (gpu:acceleration, CUDA build): the on-the-fly baths of llg-heun and
+//   the open-system LLG run on the device (src/cuda/quantum.cu); the host
+//   keeps the bath coefficients and passes them through gpu_view() once per
+//   step. Pre-generated noise, noise export, spin-lattice dynamics and MPI
+//   builds stay on the CPU and are refused with gpu:acceleration.
 //
 //   Spectra
 //   -------
@@ -120,9 +126,10 @@
 //   bath_log.cpp    log-spaced Ornstein-Uhlenbeck generator and its fit
 //   bath_fft.cpp    pre-generated (overlap-save FFT) generator
 //   export.cpp      noise export
-//   llg_atom.hpp    per-atom arithmetic shared by the CPU steppers and a
-//                   future GPU kernel: equations of motion, RK4 stages,
-//                   one-site bath updates
+//   gpu_view.cpp    bath coefficients and parameters for the CUDA module
+//   llg_atom.hpp    per-atom arithmetic shared by the CPU steppers and the
+//                   GPU kernel (src/cuda/quantum.cu): equations of motion,
+//                   RK4 stages, one-site bath updates
 //   llg.cpp         stepper dispatch, RK4 range helpers, thermostat storage
 //   llg_serial.cpp  serial steppers for on-the-fly and pre-generated noise
 //   llg_mpi.cpp     the same with halo swaps
