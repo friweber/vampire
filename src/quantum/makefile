@@ -9,6 +9,8 @@ bath_fft.o \
 bath_log.o \
 bath_ou.o \
 data.o \
+export.o \
+initialize.o \
 interface.o \
 llg.o \
 llg_mpi.o \
