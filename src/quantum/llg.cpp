@@ -32,6 +32,13 @@ namespace quantum{
 
       using namespace internal;
 
+      // first step of the run (spins final, also after a checkpoint load): oscillator to its equilibrium
+      static bool oscillator_seeded = false;
+      if(!oscillator_seeded){
+         seed_oscillator(0, spin_bath.n_sites);
+         oscillator_seeded = true;
+      }
+
       #ifdef MPICF
          if(noise_generator == on_the_fly) llg_ho_mpi();
          else llg_fft_mpi();
@@ -65,6 +72,32 @@ namespace quantum{
          k4.assign(n, 0.0);
          y_pred.assign(n, 0.0);
          y_in.assign(n, 0.0);
+
+         return;
+
+      }
+
+      //---------------------------------------------------------------------------
+      // Function to put the auxiliary oscillator at its equilibrium for the
+      // current spins, q = A S/omega0^2, p = 0 (the fixed point of
+      // dp/dt = -omega0^2 q - Gamma p + A S). Starting from q = 0 instead puts the
+      // oscillator A/omega0^2 = alpha omega0^2/Gamma away from its fixed point
+      // (14 T at omega0 = 220, 97 T at 1500 for Ni) at every start and restart
+      // (the checkpoint holds the spins only); it then rings down within ~1/Gamma.
+      // The thermal fluctuations of q, p are not seeded: they relax on the same scale.
+      //---------------------------------------------------------------------------
+      void seed_oscillator(const int start_index, const int end_index){
+
+         for(int atom = start_index; atom < end_index; atom++){
+            const int m = atoms::type_array[atom];
+            const double f = material_A[m]/(material_omega0[m]*material_omega0[m]);
+            q_x[atom] = f*atoms::x_spin_array[atom];
+            q_y[atom] = f*atoms::y_spin_array[atom];
+            q_z[atom] = f*atoms::z_spin_array[atom];
+            p_x[atom] = 0.0;
+            p_y[atom] = 0.0;
+            p_z[atom] = 0.0;
+         }
 
          return;
 

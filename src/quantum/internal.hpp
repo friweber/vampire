@@ -268,6 +268,7 @@ namespace quantum{
 
       // llg.cpp
       void allocate_thermostat(const int n_atoms);
+      void seed_oscillator(const int start_index, const int end_index);
       void rk4_save(const int start_index, const int end_index);
       void rk4_stage(const int start_index, const int end_index, const int stage, const bool ho);
       void rk4_writeback_spin(const int start_index, const int end_index);
