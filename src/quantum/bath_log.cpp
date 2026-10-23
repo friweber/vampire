@@ -67,8 +67,10 @@ namespace quantum{
       // Function to choose the rate window of the log-spaced bath by a grid scan
       // of (log lambda_lo, log lambda_hi). The target spectrum has the
       // temperature as its only scale, so the search box is centred on T and
-      // the frequency grid runs up to 15 T. The window is kept fixed when the
-      // temperature moves later; only the amplitudes are refreshed.
+      // the frequency grid runs up to 15 T. Because S(w;T) = T f(w/T), the fit
+      // is exact at every temperature once the rates scale with T: the window is
+      // stored as lambda_k/T and rescaled by log_bath_rescale() when the
+      // temperature moves (no new fit is needed).
       //---------------------------------------------------------------------------
       void log_bath_fit(bath_t& b, const double T_scaled){
 
@@ -106,8 +108,10 @@ namespace quantum{
          }
 
          b.lb_lambda.resize(n_modes);
+         b.lb_lambda_over_T.resize(n_modes);
          for(int k = 0; k < n_modes; k++){
             b.lb_lambda[k] = std::pow(10.0, best_lo + static_cast<double>(k)/(n_modes - 1)*(best_hi - best_lo));
+            b.lb_lambda_over_T[k] = b.lb_lambda[k]/T_scaled;
          }
 
          if(vmpi::my_rank == 0){
@@ -118,6 +122,16 @@ namespace quantum{
 
          return;
 
+      }
+
+      //---------------------------------------------------------------------------
+      // Function to move the fitted rate window to a new temperature,
+      // lambda_k = (lambda_k/T_fit) T. The mode states keep unit stationary
+      // variance under the exact update, so they carry over unchanged.
+      //---------------------------------------------------------------------------
+      void log_bath_rescale(bath_t& b, const double T_scaled){
+         for(int k = 0; k < b.n_modes; k++) b.lb_lambda[k] = b.lb_lambda_over_T[k]*T_scaled;
+         return;
       }
 
       //---------------------------------------------------------------------------

@@ -98,7 +98,10 @@ namespace quantum{
          if(T_scaled == b.last_T_scaled) return;
 
          if(b.spectrum == quantum_zero) ou_coefficients(b, T_scaled);
-         else log_bath_coefficients(b, T_scaled);
+         else{
+            log_bath_rescale(b, T_scaled);
+            log_bath_coefficients(b, T_scaled);
+         }
 
          b.last_T_scaled = T_scaled;
 

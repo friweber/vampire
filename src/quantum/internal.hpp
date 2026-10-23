@@ -155,6 +155,7 @@ namespace quantum{
             double white_amp;
             // log-spaced Ornstein-Uhlenbeck bath (quantum_no_zero)
             std::vector<double> lb_lambda;
+            std::vector<double> lb_lambda_over_T; // fitted rates in units of the fit temperature (lambda_k = c_k T)
             std::vector<double> lb_decay;
             std::vector<double> lb_coeff;
             std::vector<double> lb_amp;
@@ -252,6 +253,7 @@ namespace quantum{
       // bath_log.cpp
       void log_bath_fit(bath_t& b, const double T_scaled);
       void log_bath_coefficients(bath_t& b, const double T_scaled);
+      void log_bath_rescale(bath_t& b, const double T_scaled);
       void log_bath_draw(bath_t& b, const int site, const double amplitude);
 
       // bath_fft.cpp
