@@ -9,7 +9,10 @@ bath_fft.o \
 bath_log.o \
 bath_ou.o \
 data.o \
-interface.o
+interface.o \
+llg.o \
+llg_mpi.o \
+llg_serial.o
 
 # Append module objects to global tree
 OBJECTS+=$(addprefix obj/quantum/,$(quantum_objects))
