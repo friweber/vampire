@@ -14,7 +14,8 @@ initialize.o \
 interface.o \
 llg.o \
 llg_mpi.o \
-llg_serial.o
+llg_serial.o \
+gpu_view.o
 
 # Append module objects to global tree
 OBJECTS+=$(addprefix obj/quantum/,$(quantum_objects))

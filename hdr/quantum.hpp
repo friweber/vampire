@@ -76,6 +76,35 @@ namespace quantum{
                                  std::string const unit, int const line,
                                  int const super_index, const int sub_index);
 
+   //---------------------------------------------------------------------------
+   // GPU interface. The CUDA module integrates the coloured bath and the
+   // open-system LLG on the device; the host keeps the bath coefficients
+   // (built for the current temperature) and hands them over through this
+   // view once per step. Nothing here draws random numbers.
+   //---------------------------------------------------------------------------
+   struct gpu_view_t{
+      int mode;            // 0 inactive, 1 open-system LLG (llg-quantum), 2 coloured bath (llg-heun)
+      int spectrum;        // 0 classical, 1 quantum, 2 quantum-no-zero
+      int n_modes;         // auxiliary modes per site and component
+      int n_materials;
+      double T_scaled;     // reduced temperature the coefficients belong to
+      double dt;           // reduced time step (mp::dt)
+      double white_amp;    // Matsubara bath: amplitude of the white zero mode
+      const double* c0;    // Matsubara: decay      | log bath: decay
+      const double* c1;    //            diffuse    |           coeff
+      const double* c2;    //            drift      |           amp
+      const double* c3;    //            noise_amp  |           (unused)
+      const double* amplitude;       // per material, output amplitude of this phase (equilibration or run)
+      std::vector<double> white;     // per material, classical open-system thermostat prefactor
+      const double* A;               // per material, os-LLG coupling alpha*omega0^4/gamma
+      const double* gamma;           // per material, Lorentzian width
+      const double* omega0;          // per material, Lorentzian centre
+   };
+   bool gpu_active();                // the module runs and the GPU takes over its work
+   bool gpu_bath();                  // coloured bath for llg-heun on the GPU
+   bool gpu_thermostat();            // open-system LLG on the GPU
+   void gpu_view(gpu_view_t& view);  // refresh the coefficients for sim::temperature and fill the view
+
 } // end of quantum namespace
 
 #endif //QUANTUM_H_

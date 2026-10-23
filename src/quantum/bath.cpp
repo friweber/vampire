@@ -24,6 +24,7 @@
 #include "vio.hpp"
 
 // quantum module headers
+#include "gpu.hpp"
 #include "internal.hpp"
 
 namespace quantum{
@@ -191,6 +192,9 @@ namespace quantum{
       using namespace internal;
 
       if(mode != bath) return;
+
+      // the CUDA module draws the bath on the device (see gpu_view.cpp)
+      if(gpu::acceleration) return;
 
       draw(spin_bath);
       if(lattice_bath.n_sites > 0) draw(lattice_bath);
