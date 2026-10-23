@@ -151,7 +151,8 @@ namespace vcuda{
       }
 
 
-      cu::mc::initialise();
+      // Monte Carlo is initialised on its first step (vcuda::mc_step). Doing it here ran a
+      // trial MC sweep on the spins of every GPU run, LLG included, after a checkpoint load.
 
       // Successful initialization
       return success;

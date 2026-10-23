@@ -251,6 +251,9 @@ namespace vcuda
             void finalise()
             {
 
+                if(!initialised) return;
+                initialised = false;
+
                 curandDestroyGenerator(gen);
 
                 cudaFree(d_rand_spin);
