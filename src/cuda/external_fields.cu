@@ -210,7 +210,14 @@ namespace internal{
       }
       // Otherwise calculate global thermal field and applied fields
       else{
-         cu::update_global_thermal_field();
+         // no thermal field where the CPU has none either (sim::thermal_field_enabled
+         // is cleared by static hysteresis, CMC, LSF, Lagrange, ...)
+         if(sim::thermal_field_enabled) cu::update_global_thermal_field();
+         else{
+            cudaMemset(cu::d_x_external_field, 0, num_atoms*sizeof(cu_real_t));
+            cudaMemset(cu::d_y_external_field, 0, num_atoms*sizeof(cu_real_t));
+            cudaMemset(cu::d_z_external_field, 0, num_atoms*sizeof(cu_real_t));
+         }
          cu::update_applied_fields();
       }
 
