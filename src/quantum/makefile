@@ -5,6 +5,7 @@
 # List module object filenames
 quantum_objects=\
 bath.o \
+bath_log.o \
 bath_ou.o \
 data.o \
 interface.o
