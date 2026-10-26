@@ -73,19 +73,22 @@ namespace quantum{
          bool is_set(){ return setf; };
       };
 
-      // per-material parameters of the thermostat's Lorentzian response
+      // per-material parameters of the thermostat's Lorentzian response and
+      // of the optional Ohmic (electron) bath of the combined thermostat
       class mp_t{
 
          private:
 
          public:
-            set_double_t gamma;  // Lorentzian width (rad/s)
-            set_double_t omega0; // Lorentzian central frequency (rad/s)
+            set_double_t gamma;   // Lorentzian width (rad/s)
+            set_double_t omega0;  // Lorentzian central frequency (rad/s)
+            set_double_t alpha_e; // Ohmic damping of the combined thermostat (0 = Lorentzian only)
 
             // constructor
             mp_t (){
                gamma.set(0.0);
                omega0.set(0.0);
+               alpha_e.set(0.0);
             };
       };
 
@@ -147,6 +150,8 @@ namespace quantum{
             double last_T_scaled;  // temperature the coefficients were built for
             std::vector<double> amp;    // per-material output amplitude
             std::vector<double> amp_eq; // per-material output amplitude during equilibration
+            std::vector<double> coupling; // classical thermostat: per-material damping strength,
+                                          // Gamma A (oscillator) or alpha_e (Ohmic field)
             // Matsubara Ornstein-Uhlenbeck modes (quantum_zero)
             std::vector<double> ou_decay;
             std::vector<double> ou_diffuse;
@@ -200,6 +205,8 @@ namespace quantum{
 
       extern bath_t spin_bath;            // spin bath (thermostat, llg-heun, spin-lattice)
       extern bath_t lattice_bath;         // lattice bath (spin-lattice only)
+      extern bath_t ohmic_bath;           // Ohmic (electron) field of the combined thermostat
+      extern bool ohmic;                  // thermostat with Ohmic bath (some alpha_e > 0)
 
       extern bool lattice_parameters_set;            // set_lattice_parameters() was called
       extern std::vector<double> lattice_mass;       // per-material atomic mass (eV ps^2/A^2)
@@ -211,6 +218,7 @@ namespace quantum{
       extern std::vector<double> material_gamma;  // Lorentzian width (rad/s)
       extern std::vector<double> material_omega0; // Lorentzian central frequency (rad/s)
       extern std::vector<double> material_S0;     // moment in units of hbar*gamma_e
+      extern std::vector<double> material_alpha_e; // Ohmic damping of the combined thermostat
 
       // thermostat: per-atom auxiliary oscillator and RK4 storage
       extern std::vector<double> q_x;

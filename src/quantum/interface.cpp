@@ -184,6 +184,15 @@ namespace quantum{
          return true;
       }
       //--------------------------------------------------------------------
+      // Ohmic (electron) bath of the combined thermostat, llg-quantum only
+      test="quantum-ohmic-damping";
+      if(word==test){
+         double alpha_e = vin::str_to_double(value);
+         vin::check_for_valid_value(alpha_e, word, line, prefix, unit, "none", 0.0, 10.0, "material", "0 - 10");
+         internal::mp[super_index].alpha_e.set(alpha_e);
+         return true;
+      }
+      //--------------------------------------------------------------------
       // keyword not found
       //--------------------------------------------------------------------
       return false;

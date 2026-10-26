@@ -165,7 +165,12 @@ namespace quantum{
                noise[0] = b.x[atom];
                noise[1] = b.y[atom];
                noise[2] = b.z[atom];
-               ho_equation_of_motion(y, H, noise, material_A[m], material_gamma[m], material_omega0[m], dydt);
+               if(ohmic){
+                  const double h_e[3] = {ohmic_bath.x[atom], ohmic_bath.y[atom], ohmic_bath.z[atom]};
+                  ho_ohmic_equation_of_motion(y, H, noise, h_e, material_A[m], material_gamma[m],
+                                              material_omega0[m], material_alpha_e[m], dydt);
+               }
+               else ho_equation_of_motion(y, H, noise, material_A[m], material_gamma[m], material_omega0[m], dydt);
             }
             else{
                H[0] += b.x[atom];

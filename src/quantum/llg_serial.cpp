@@ -25,7 +25,8 @@ namespace quantum{
 
       //---------------------------------------------------------------------------
       // Serial RK4 step with on-the-fly noise. The bath sample is drawn once
-      // and drives the auxiliary oscillator in every stage.
+      // and drives the auxiliary oscillator in every stage; so does the Ohmic
+      // field sample of the combined thermostat, which acts on the spin.
       //---------------------------------------------------------------------------
       void llg_ho_serial(){
 
@@ -35,6 +36,7 @@ namespace quantum{
          sim::calculate_spin_fields(0, n);
          sim::calculate_external_fields(0, n);
          draw(spin_bath);
+         if(ohmic) draw(ohmic_bath);
 
          rk4_stage(0, n, 1, true);
          rk4_writeback_spin(0, n);

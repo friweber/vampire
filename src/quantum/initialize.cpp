@@ -154,6 +154,13 @@ namespace quantum{
       // Thermostat (llg-quantum): per-material Lorentzian response and a spin
       // bath whose amplitude balances that response. Classical noise is
       // allowed here; it is the classical open-system model.
+      //
+      // Combined thermostat: with material:quantum-ohmic-damping alpha_e > 0
+      // the spin is coupled to a second, Ohmic bath as well (Gilbert damping
+      // alpha_e and its noise field, see ho_ohmic_equation_of_motion), with the
+      // same spectrum and temperature but independent samples. Read as a
+      // Lorentzian phonon bath plus an Ohmic electron bath. Its amplitude
+      // sqrt(alpha_e/S0) is the one llg-heun uses for a coloured bath.
       //---------------------------------------------------------------------------
       static void initialize_thermostat(){
 
@@ -164,8 +171,12 @@ namespace quantum{
          material_gamma.resize(n_mat);
          material_omega0.resize(n_mat);
          material_S0.resize(n_mat);
+         material_alpha_e.assign(n_mat, 0.0);
 
          std::vector<double> amp(n_mat);
+         std::vector<double> coupling(n_mat);
+         std::vector<double> amp_e(n_mat, 0.0);
+         ohmic = false;
 
          for(int m = 0; m < n_mat; m++){
 
@@ -190,13 +201,30 @@ namespace quantum{
             // on-the-fly: the oscillator filters the bath, amplitude sqrt(gamma A/S0);
             // pre-generated: the filter is in the spectrum, amplitude 1/sqrt(S0)
             amp[m] = (noise_generator == pre_generated) ? 1.0/std::sqrt(S0) : std::sqrt(gamma*A/S0);
+            coupling[m] = gamma*A;
 
+            // Ohmic bath of the combined thermostat
+            const double alpha_e = mp[m].alpha_e.get();
+            material_alpha_e[m] = alpha_e;
+            amp_e[m] = std::sqrt(alpha_e/S0);
+            if(alpha_e > 0.0) ohmic = true;
+
+         }
+
+         if(ohmic && noise_generator == pre_generated){
+            err::fatal("Error - material:quantum-ohmic-damping (combined thermostat) is supported with "
+                       "quantum:noise-generator = on-the-fly only.");
          }
 
          const uint64_t n_run = pre_generated_run_length();
          const int n = num_local_atoms();
 
          setup_bath(spin_bath, noise_type, noise_generator, n, mp::dt, spin_temperature_scale(), amp, amp, true, n_run);
+         spin_bath.coupling = coupling;
+         if(ohmic){
+            setup_bath(ohmic_bath, noise_type, on_the_fly, n, mp::dt, spin_temperature_scale(), amp_e, amp_e, false, 0);
+            ohmic_bath.coupling = material_alpha_e;
+         }
          allocate_thermostat(n);
 
          mode = thermostat;
@@ -325,6 +353,16 @@ namespace quantum{
 
       }
 
+      // the Ohmic bath belongs to the open-system thermostat
+      if(mode != thermostat){
+         for(size_t m = 0; m < internal::mp.size(); m++){
+            if(internal::mp[m].alpha_e.get() > 0.0){
+               err::warning("Warning - material:quantum-ohmic-damping is used by sim:integrator = llg-quantum only and is ignored here.");
+               break;
+            }
+         }
+      }
+
       if(mode == inactive) return;
 
       // GPU: the CUDA module runs the on-the-fly (HO) baths and the open-system
@@ -374,7 +412,7 @@ namespace quantum{
 
       std::ostringstream banner;
       banner << "Initialising quantum noise module: "
-             << ((mode == thermostat) ? "open-system LLG" : "coloured bath") << ", spectrum "
+             << ((mode == thermostat) ? (ohmic ? "open-system LLG + Ohmic bath" : "open-system LLG") : "coloured bath") << ", spectrum "
              << spectrum_name(noise_type) << ", generator " << generator_name(noise_generator)
              << ", " << spin_bath.n_sites << " atoms";
       if(coloured && noise_generator == on_the_fly) banner << ", " << n_bath_modes << " bath modes";

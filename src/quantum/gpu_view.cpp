@@ -80,8 +80,15 @@ namespace quantum{
       v.gamma = material_gamma.data();
       v.omega0 = material_omega0.data();
 
+      // combined thermostat: the Ohmic bath has the spectrum, temperature and step of the
+      // spin bath, hence the same coefficients; only its amplitudes differ
+      v.ohmic = (mode == thermostat && ohmic) ? 1 : 0;
+      v.alpha_e = material_alpha_e.data();
+      v.amplitude_e = ohmic_bath.amp.data();
+
       // classical open-system thermostat: white noise with the prefactor of draw_white_thermostat()
       v.white.assign(v.n_materials, 0.0);
+      v.white_e.assign(v.n_materials, 0.0);
       if(mode == thermostat && b.spectrum == classical){
          for(int m = 0; m < v.n_materials; m++){
             double T = sim::temperature;
@@ -91,6 +98,7 @@ namespace quantum{
             const double T_rescaled = (T < Tc) ? Tc*std::pow(T/Tc, a) : T;
             const double T_scaled = T_rescaled*b.T_scale;
             v.white[m] = std::sqrt(2.0*material_gamma[m]*material_A[m]*T_scaled/(material_S0[m]*b.dt));
+            if(v.ohmic) v.white_e[m] = std::sqrt(2.0*material_alpha_e[m]*T_scaled/(material_S0[m]*b.dt));
          }
       }
 

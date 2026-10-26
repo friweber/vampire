@@ -46,6 +46,8 @@ namespace quantum{
 
       bath_t spin_bath;                       // spin bath
       bath_t lattice_bath;                    // lattice bath (spin-lattice only)
+      bath_t ohmic_bath;                      // Ohmic (electron) field, combined thermostat only
+      bool ohmic = false;                     // combined thermostat (some alpha_e > 0)
 
       bool lattice_parameters_set = false;    // spin-lattice handed over its parameters
       std::vector<double> lattice_mass;       // eV ps^2/A^2
@@ -56,6 +58,7 @@ namespace quantum{
       std::vector<double> material_gamma;     // rad/s
       std::vector<double> material_omega0;    // rad/s
       std::vector<double> material_S0;        // mu_s/(hbar*gamma_e)
+      std::vector<double> material_alpha_e;   // Ohmic damping, combined thermostat
 
       std::vector<double> q_x;                // auxiliary oscillator position
       std::vector<double> q_y;

@@ -64,6 +64,55 @@ namespace quantum{
       }
 
       //-------------------------------------------------------------------------
+      // Equation of motion of the combined thermostat: the Lorentzian
+      // oscillator above (phonon bath) plus an Ohmic bath acting on the spin
+      // directly (electron bath), a Gilbert damping alpha_e with its own
+      // noise field b. In Gilbert form, with H' = H + q + b,
+      //    dS/dt = S x H' - alpha_e S x dS/dt
+      // solved for dS/dt (Landau-Lifshitz form):
+      //    dS/dt = [S x H' - alpha_e S x (S x H')]/(1 + alpha_e^2)
+      // The oscillator is unchanged. At low frequency q contains
+      // -alpha dS/dt, so the total Gilbert damping there is alpha + alpha_e.
+      // alpha_e = 0, b = 0 is ho_equation_of_motion.
+      //-------------------------------------------------------------------------
+      QUANTUM_HOST_DEVICE inline void ho_ohmic_equation_of_motion(const double* y, const double* H,
+                                                                  const double* noise, const double* b,
+                                                                  const double A, const double Gamma,
+                                                                  const double omega0, const double alpha_e,
+                                                                  double* dydt){
+
+         const double hx = H[0] + y[3] + b[0];
+         const double hy = H[1] + y[4] + b[1];
+         const double hz = H[2] + y[5] + b[2];
+
+         // S x H'
+         const double tx = y[1]*hz - y[2]*hy;
+         const double ty = y[2]*hx - y[0]*hz;
+         const double tz = y[0]*hy - y[1]*hx;
+
+         // S x (S x H')
+         const double dx = y[1]*tz - y[2]*ty;
+         const double dy = y[2]*tx - y[0]*tz;
+         const double dz = y[0]*ty - y[1]*tx;
+
+         const double f = 1.0/(1.0 + alpha_e*alpha_e);
+         dydt[0] = f*(tx - alpha_e*dx);
+         dydt[1] = f*(ty - alpha_e*dy);
+         dydt[2] = f*(tz - alpha_e*dz);
+
+         dydt[3] = y[6];
+         dydt[4] = y[7];
+         dydt[5] = y[8];
+
+         dydt[6] = -omega0*omega0*y[3] - Gamma*y[6] + A*y[0] + noise[0];
+         dydt[7] = -omega0*omega0*y[4] - Gamma*y[7] + A*y[1] + noise[1];
+         dydt[8] = -omega0*omega0*y[5] - Gamma*y[8] + A*y[2] + noise[2];
+
+         return;
+
+      }
+
+      //-------------------------------------------------------------------------
       // Equation of motion for pre-generated noise. The sample is already
       // shaped by the Lorentzian and enters through H; the oscillator runs
       // without a noise term.

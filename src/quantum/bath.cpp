@@ -147,9 +147,10 @@ namespace quantum{
 
       //---------------------------------------------------------------------------
       // Function to draw white noise for the thermostat. The prefactor
-      // sqrt(2 Gamma A T/(S0 dt)) balances the Lorentzian damping, and the
-      // temperature carries the per-material rescaling that the classical
-      // thermal field applies.
+      // sqrt(2 c T/(S0 dt)) balances the damping c = b.coupling: Gamma A for the
+      // Lorentzian oscillator, alpha_e for the Ohmic field of the combined
+      // thermostat. The temperature carries the per-material rescaling that
+      // the classical thermal field applies.
       //---------------------------------------------------------------------------
       void draw_white_thermostat(bath_t& b){
 
@@ -165,7 +166,7 @@ namespace quantum{
 
          for(int atom = 0; atom < b.n_sites; atom++){
             const int m = atoms::type_array[atom];
-            const double prefactor = std::sqrt(2.0*material_gamma[m]*material_A[m]*T_scaled_mat[m]/(material_S0[m]*b.dt));
+            const double prefactor = std::sqrt(2.0*b.coupling[m]*T_scaled_mat[m]/(material_S0[m]*b.dt));
             b.x[atom] = prefactor*mtrandom::gaussian();
             b.y[atom] = prefactor*mtrandom::gaussian();
             b.z[atom] = prefactor*mtrandom::gaussian();

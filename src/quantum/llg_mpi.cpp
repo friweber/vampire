@@ -54,7 +54,8 @@ namespace quantum{
 
       //---------------------------------------------------------------------------
       // MPI RK4 step with on-the-fly noise. The bath sample is drawn once for
-      // all local atoms and drives the auxiliary oscillator in every stage.
+      // all local atoms and drives the auxiliary oscillator in every stage;
+      // the Ohmic field sample of the combined thermostat likewise.
       //---------------------------------------------------------------------------
       void llg_ho_mpi(){
 
@@ -65,6 +66,7 @@ namespace quantum{
 
          rk4_save(0, n);
          draw(spin_bath);
+         if(ohmic) draw(ohmic_bath);
 
          mpi_stage(1, true);
          mpi_stage(2, true);

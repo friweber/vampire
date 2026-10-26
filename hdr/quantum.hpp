@@ -99,6 +99,11 @@ namespace quantum{
       const double* A;               // per material, os-LLG coupling alpha*omega0^4/gamma
       const double* gamma;           // per material, Lorentzian width
       const double* omega0;          // per material, Lorentzian centre
+      // combined thermostat: Ohmic (electron) bath on the spin, same spectrum and coefficients
+      int ohmic;                     // 1 when some material has alpha_e > 0
+      const double* alpha_e;         // per material, Ohmic damping
+      const double* amplitude_e;     // per material, output amplitude of the Ohmic bath
+      std::vector<double> white_e;   // per material, classical Ohmic prefactor
    };
    bool gpu_active();                // the module runs and the GPU takes over its work
    bool gpu_bath();                  // coloured bath for llg-heun on the GPU

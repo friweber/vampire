@@ -18,6 +18,8 @@
 //                        open-system model). Needs the material parameters
 //                        quantum-lorentzian-width and
 //                        quantum-lorentzian-central-frequency.
+//                        With quantum-ohmic-damping > 0: combined
+//                        thermostat, see below.
 //     llg-heun           coloured spin bath when the spectrum is not
 //                        classical: the integrator draws it once per step and
 //                        sim::calculate_thermal_fields() copies it into the
@@ -49,6 +51,26 @@
 //   All three tend to 2T for w -> 0, so a coloured bath reproduces the
 //   classical white noise in that limit and the amplitudes below are fixed
 //   by requiring exactly that.
+//
+//   Combined thermostat (Lorentzian + Ohmic)
+//   ----------------------------------------
+//   material:quantum-ohmic-damping = alpha_e > 0 couples the spin of
+//   llg-quantum to a second, Ohmic bath besides the Lorentzian oscillator:
+//   read the Lorentzian as the phonon bath and the Ohmic bath as the
+//   electron bath. With H' = H + q + b (b the Ohmic noise field),
+//
+//     dS/dt = S x H' - alpha_e S x dS/dt          (Gilbert form; RK4 uses
+//           = [S x H' - alpha_e S x (S x H')]/(1 + alpha_e^2)   the LL form)
+//     q'' = -omega0^2 q - Gamma q' + A S + xi,    A = alpha omega0^4/Gamma
+//
+//   material:damping-constant (alpha) stays the strength of the Lorentzian,
+//   so the total low-frequency damping is alpha + alpha_e; above omega0 the
+//   Lorentzian falls off as omega^-4 and the Ohmic bath dominates. Both
+//   baths have the spectrum of quantum:noise-type and sim:temperature, with
+//   independent samples; b has the amplitude of the llg-heun bath with
+//   alpha_e in place of alpha, sqrt(alpha_e/S0) (white: 2 alpha_e T/(S0 dt)).
+//   alpha_e = 0 for every material is the plain open-system LLG, bit for
+//   bit. On-the-fly generator only (CPU, MPI and GPU).
 //
 //   Generators
 //   ----------
@@ -113,6 +135,7 @@
 //   quantum:export-noise-atom       which atom (default 0)
 //   material:quantum-lorentzian-width              Gamma, reduced units
 //   material:quantum-lorentzian-central-frequency  omega0, reduced units
+//   material:quantum-ohmic-damping                 alpha_e, combined thermostat
 //
 //   Files
 //   -----
@@ -120,7 +143,8 @@
 //   data.cpp        definitions and defaults
 //   interface.cpp   keywords
 //   initialize.cpp  mode decision, amplitudes, run length, banner, cleanup
-//   bath.cpp        bath setup, temperature refresh, per-step draw; public
+//   bath.cpp        bath setup, temperature refresh, per-step draw (spin,
+//                   lattice and Ohmic bath); public
 //                   enabled/generate/field/thermal_fields/lattice_field
 //   bath_ou.cpp     Matsubara Ornstein-Uhlenbeck generator
 //   bath_log.cpp    log-spaced Ornstein-Uhlenbeck generator and its fit
