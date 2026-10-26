@@ -19,7 +19,9 @@
 //   2. Open-system LLG (llg-quantum): spin + Lorentzian auxiliary oscillator,
 //      classical RK4, with the bath noise driving the oscillator. The per-atom
 //      arithmetic is the module's own (src/quantum/llg_atom.hpp), so CPU and
-//      GPU integrate the same equations.
+//      GPU integrate the same equations. Combined thermostat (some alpha_e >
+//      0): a second bath of the same spectrum, the Ohmic (electron) bath,
+//      adds its field and a Gilbert damping alpha_e to the spin equation.
 //
 //   The host keeps the bath coefficients (rebuilt when sim::temperature moves,
 //   lambda_k rescaled with T for the log bath) and uploads them to constant
@@ -74,12 +76,16 @@ namespace vcuda{
          __constant__ double c_A[max_materials];
          __constant__ double c_gamma[max_materials];
          __constant__ double c_omega0[max_materials];
+         __constant__ double c_amplitude_e[max_materials]; // combined thermostat: Ohmic bath
+         __constant__ double c_white_e[max_materials];
+         __constant__ double c_alpha_e[max_materials];
 
          bool initialised = false;
          int n_atoms = 0;
          int n_modes = 0;
          int spectrum = 0;
          int mode = 0;
+         int ohmic = 0;
          double uploaded_T = -1.0;
          const double* uploaded_amplitude = 0;
 
@@ -91,6 +97,8 @@ namespace vcuda{
          double* d_yin = 0;    // RK4 state at the start of the step, [9][atom]
          double* d_ypred = 0;  // RK4 predictor
          double* d_k = 0;      // RK4 slopes, [4][9][atom]
+         double* d_s_e = 0;    // combined thermostat: Ohmic bath mode states, as d_s
+         double* d_noise_e = 0; // combined thermostat: Ohmic field sample, as d_noise
 
          //---------------------------------------------------------------------
          // Kernels
@@ -117,16 +125,17 @@ namespace vcuda{
 
          // One bath step for every atom. spectrum 1: Matsubara OU (+ white zero mode),
          // spectrum 2: log-spaced OU. Same update as ou_update_atom / log_bath_update_atom.
+         // ohmic_bath selects the output amplitude: 0 spin (oscillator) bath, 1 Ohmic bath.
          __global__ void bath_kernel(double* s, double* out, const int* material,
                                      curandStatePhilox4_32_10_t* states,
                                      const int n_atoms, const int n_modes, const int spectrum,
-                                     const double white_amp){
+                                     const double white_amp, const int ohmic_bath){
             const int tid = blockIdx.x*blockDim.x + threadIdx.x;
             curandStatePhilox4_32_10_t rng = states[tid];
             normal_source_t gauss(&rng);
             const size_t N = n_atoms;
             for(int atom = tid; atom < n_atoms; atom += blockDim.x*gridDim.x){
-               const double amplitude = c_amplitude[material[atom]];
+               const double amplitude = ohmic_bath ? c_amplitude_e[material[atom]] : c_amplitude[material[atom]];
                for(int c = 0; c < 3; c++){
                   double* sc = s + static_cast<size_t>(c)*n_modes*N;
                   double sum = 0.0;
@@ -154,14 +163,16 @@ namespace vcuda{
             states[tid] = rng;
          }
 
-         // Classical open-system thermostat: white noise into the oscillator
+         // Classical open-system thermostat: white noise into the oscillator (ohmic_bath 0)
+         // or the Ohmic field of the combined thermostat (ohmic_bath 1)
          __global__ void white_kernel(double* out, const int* material,
-                                      curandStatePhilox4_32_10_t* states, const int n_atoms){
+                                      curandStatePhilox4_32_10_t* states, const int n_atoms,
+                                      const int ohmic_bath){
             const int tid = blockIdx.x*blockDim.x + threadIdx.x;
             curandStatePhilox4_32_10_t rng = states[tid];
             const size_t N = n_atoms;
             for(int atom = tid; atom < n_atoms; atom += blockDim.x*gridDim.x){
-               const double w = c_white[material[atom]];
+               const double w = ohmic_bath ? c_white_e[material[atom]] : c_white[material[atom]];
                const float4 g = curand_normal4(&rng);
                out[atom]       = w*g.x;
                out[N + atom]   = w*g.y;
@@ -210,7 +221,7 @@ namespace vcuda{
                                       const double* yin, double* ypred, double* k_all,
                                       const cu_real_t* hsx, const cu_real_t* hsy, const cu_real_t* hsz,
                                       const cu_real_t* hex, const cu_real_t* hey, const cu_real_t* hez,
-                                      const double* noise, const int* material,
+                                      const double* noise, const double* noise_e, const int* material,
                                       cu_real_t* sx, cu_real_t* sy, cu_real_t* sz, const int n_atoms){
             const size_t N = n_atoms;
             const double* ysrc = (stage == 1) ? yin : ypred;
@@ -224,7 +235,11 @@ namespace vcuda{
                H[2] = hsz[atom] + hez[atom];
                xi[0] = noise[atom]; xi[1] = noise[N + atom]; xi[2] = noise[2*N + atom];
                const int m = material[atom];
-               quantum::internal::ho_equation_of_motion(y, H, xi, c_A[m], c_gamma[m], c_omega0[m], dydt);
+               if(noise_e){
+                  const double h_e[3] = {noise_e[atom], noise_e[N + atom], noise_e[2*N + atom]};
+                  quantum::internal::ho_ohmic_equation_of_motion(y, H, xi, h_e, c_A[m], c_gamma[m], c_omega0[m], c_alpha_e[m], dydt);
+               }
+               else quantum::internal::ho_equation_of_motion(y, H, xi, c_A[m], c_gamma[m], c_omega0[m], dydt);
                for(int i = 0; i < 9; i++) k[i*N + atom] = dydt[i];
                if(stage < 4){
                   double yp[9];
@@ -267,6 +282,7 @@ namespace vcuda{
             n_modes = v.n_modes;
             spectrum = v.spectrum;
             mode = v.mode;
+            ohmic = v.ohmic;
 
             if(n_modes > max_modes) err::fatal("Error - quantum:bath-modes exceeds the GPU limit of 256.");
             if(v.n_materials > max_materials) err::fatal("Error - the quantum module on the GPU supports at most 64 materials.");
@@ -291,13 +307,23 @@ namespace vcuda{
                cudaMemcpyToSymbol(c_A, v.A, v.n_materials*sizeof(double));
                cudaMemcpyToSymbol(c_gamma, v.gamma, v.n_materials*sizeof(double));
                cudaMemcpyToSymbol(c_omega0, v.omega0, v.n_materials*sizeof(double));
+               if(ohmic){
+                  cudaMalloc((void**)&d_noise_e, 3*N*sizeof(double));
+                  cudaMemset(d_noise_e, 0, 3*N*sizeof(double));
+                  if(spectrum != 0){
+                     cudaMalloc((void**)&d_s_e, 3*N*n_modes*sizeof(double));
+                     cudaMemset(d_s_e, 0, 3*N*n_modes*sizeof(double));
+                  }
+                  cudaMemcpyToSymbol(c_alpha_e, v.alpha_e, v.n_materials*sizeof(double));
+                  cudaMemcpyToSymbol(c_amplitude_e, v.amplitude_e, v.n_materials*sizeof(double)); // same in both phases
+               }
                // first step: the device spins are final (also after a checkpoint load)
                seed_oscillator_kernel <<< cu::grid_size, cu::block_size >>> (cu::atoms::d_x_spin, cu::atoms::d_y_spin,
                   cu::atoms::d_z_spin, cu::atoms::d_materials, d_q, d_p, n_atoms);
             }
             check_cuda_errors(__FILE__, __LINE__);
 
-            zlog << zTs() << "Quantum module on the GPU: " << (mode == 1 ? "open-system LLG (RK4)" : "coloured bath for llg-heun")
+            zlog << zTs() << "Quantum module on the GPU: " << (mode == 1 ? (ohmic ? "open-system LLG + Ohmic bath (RK4)" : "open-system LLG (RK4)") : "coloured bath for llg-heun")
                  << ", spectrum " << (spectrum == 0 ? "classical" : spectrum == 1 ? "quantum (Matsubara OU)" : "quantum-no-zero (log OU)")
                  << ", " << n_modes << " modes, " << n_atoms << " atoms" << std::endl;
 
@@ -323,17 +349,22 @@ namespace vcuda{
             if(mode == 1 && v.spectrum == 0){
                // the classical prefactor carries the temperature: refresh every step (n_materials doubles)
                cudaMemcpyToSymbol(c_white, v.white.data(), v.n_materials*sizeof(double));
+               if(ohmic) cudaMemcpyToSymbol(c_white_e, v.white_e.data(), v.n_materials*sizeof(double));
             }
             return;
          }
 
          void draw(const quantum::gpu_view_t& v){
-            if(v.spectrum == 0){
-               white_kernel <<< cu::grid_size, cu::block_size >>> (d_noise, cu::atoms::d_materials, d_rng, n_atoms);
-            }
-            else{
-               bath_kernel <<< cu::grid_size, cu::block_size >>> (d_s, d_noise, cu::atoms::d_materials, d_rng,
-                                                                   n_atoms, n_modes, v.spectrum, v.white_amp);
+            // the Ohmic bath of the combined thermostat shares the coefficients, not the samples
+            for(int e = 0; e <= ohmic; e++){
+               double* out = e ? d_noise_e : d_noise;
+               if(v.spectrum == 0){
+                  white_kernel <<< cu::grid_size, cu::block_size >>> (out, cu::atoms::d_materials, d_rng, n_atoms, e);
+               }
+               else{
+                  bath_kernel <<< cu::grid_size, cu::block_size >>> (e ? d_s_e : d_s, out, cu::atoms::d_materials, d_rng,
+                                                                      n_atoms, n_modes, v.spectrum, v.white_amp, e);
+               }
             }
             check_cuda_errors(__FILE__, __LINE__);
          }
@@ -359,6 +390,8 @@ namespace vcuda{
          cudaFree(qg::d_rng); cudaFree(qg::d_noise);
          if(qg::d_s) cudaFree(qg::d_s);
          if(qg::d_q){ cudaFree(qg::d_q); cudaFree(qg::d_p); cudaFree(qg::d_yin); cudaFree(qg::d_ypred); cudaFree(qg::d_k); }
+         if(qg::d_noise_e) cudaFree(qg::d_noise_e);
+         if(qg::d_s_e) cudaFree(qg::d_s_e);
          qg::initialised = false;
       }
 
@@ -386,7 +419,7 @@ namespace vcuda{
          qg::stage_kernel <<< cu::grid_size, cu::block_size >>> (stage, dt, qg::d_yin, qg::d_ypred, qg::d_k,
                cu::d_x_spin_field, cu::d_y_spin_field, cu::d_z_spin_field,
                cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field,
-               qg::d_noise, cu::atoms::d_materials,
+               qg::d_noise, qg::ohmic ? qg::d_noise_e : nullptr, cu::atoms::d_materials,
                cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin, n);
          if(stage < 4) cu::update_spin_fields();
       }
