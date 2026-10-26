@@ -17,6 +17,7 @@
 // Vampire Header files
 #include "atoms.hpp"
 #include "errors.hpp"
+#include "gpu.hpp"
 #include "material.hpp"
 #include "program.hpp"
 #include "random.hpp"
@@ -78,6 +79,9 @@ void spin_waves(){
 
       // Integrate system
       sim::integrate(sim::partial_time);
+
+      // with gpu:acceleration the spins live on the device; the spin-wave FFT reads the host arrays
+      if(gpu::acceleration) gpu::transfer_spin_positions_from_gpu_to_cpu();
 
       // calculate spinwaves JRH
       //const int step = (sim::time-sim::equilibration_time)/sim::partial_time-1;
