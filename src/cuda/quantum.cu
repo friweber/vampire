@@ -21,7 +21,9 @@
 //      arithmetic is the module's own (src/quantum/llg_atom.hpp), so CPU and
 //      GPU integrate the same equations. Combined thermostat (some alpha_e >
 //      0): a second bath of the same spectrum, the Ohmic (electron) bath,
-//      adds its field and a Gilbert damping alpha_e to the spin equation.
+//      adds its field and a Gilbert damping alpha_e to the spin equation. It
+//      has its own coefficients: with quantum:lorentzian-bath-temperature =
+//      phonon the Lorentzian bath follows T_p and the Ohmic bath T_e (2TM).
 //
 //   The host keeps the bath coefficients (rebuilt when sim::temperature moves,
 //   lambda_k rescaled with T for the log bath) and uploads them to constant
@@ -79,6 +81,10 @@ namespace vcuda{
          __constant__ double c_amplitude_e[max_materials]; // combined thermostat: Ohmic bath
          __constant__ double c_white_e[max_materials];
          __constant__ double c_alpha_e[max_materials];
+         __constant__ double c_e0[max_modes];             // Ohmic bath coefficients (its own temperature, T_e)
+         __constant__ double c_e1[max_modes];
+         __constant__ double c_e2[max_modes];
+         __constant__ double c_e3[max_modes];
 
          bool initialised = false;
          int n_atoms = 0;
@@ -87,6 +93,7 @@ namespace vcuda{
          int mode = 0;
          int ohmic = 0;
          double uploaded_T = -1.0;
+         double uploaded_T_e = -1.0;
          const double* uploaded_amplitude = 0;
 
          curandStatePhilox4_32_10_t* d_rng = 0;
@@ -143,8 +150,11 @@ namespace vcuda{
                      for(int k = 0; k < n_modes; k++){
                         const double xi = gauss.next();
                         double sk = sc[k*N + atom];
-                        sum += c_c2[k]*sk + c_c3[k]*xi;        // drift*s(old) + noise_amp*xi
-                        sk = c_c0[k]*sk + c_c1[k]*xi;          // exact OU update
+                        // coefficients of this bath; the choice is uniform, both reads stay in constant memory
+                        const double d0 = ohmic_bath ? c_e0[k] : c_c0[k], d1 = ohmic_bath ? c_e1[k] : c_c1[k];
+                        const double d2 = ohmic_bath ? c_e2[k] : c_c2[k], d3 = ohmic_bath ? c_e3[k] : c_c3[k];
+                        sum += d2*sk + d3*xi;                  // drift*s(old) + noise_amp*xi
+                        sk = d0*sk + d1*xi;                    // exact OU update
                         sc[k*N + atom] = sk;
                      }
                      sum += white_amp*gauss.next();
@@ -152,9 +162,11 @@ namespace vcuda{
                   else{
                      for(int k = 0; k < n_modes; k++){
                         const double xi = gauss.next();
-                        const double sk = c_c0[k]*sc[k*N + atom] + c_c1[k]*xi;
+                        const double d0 = ohmic_bath ? c_e0[k] : c_c0[k], d1 = ohmic_bath ? c_e1[k] : c_c1[k];
+                        const double d2 = ohmic_bath ? c_e2[k] : c_c2[k];
+                        const double sk = d0*sc[k*N + atom] + d1*xi;
                         sc[k*N + atom] = sk;
-                        sum += c_c2[k]*sk;                      // amp * s(new)
+                        sum += d2*sk;                           // amp * s(new)
                      }
                   }
                   out[c*N + atom] = amplitude*sum;
@@ -342,6 +354,13 @@ namespace vcuda{
                if(v.c3) cudaMemcpyToSymbol(c_c3, v.c3, n_modes*sizeof(double));
                uploaded_T = v.T_scaled;
             }
+            if(ohmic && v.spectrum != 0 && v.T_scaled_e != uploaded_T_e){
+               cudaMemcpyToSymbol(c_e0, v.e0, n_modes*sizeof(double));
+               cudaMemcpyToSymbol(c_e1, v.e1, n_modes*sizeof(double));
+               cudaMemcpyToSymbol(c_e2, v.e2, n_modes*sizeof(double));
+               if(v.e3) cudaMemcpyToSymbol(c_e3, v.e3, n_modes*sizeof(double));
+               uploaded_T_e = v.T_scaled_e;
+            }
             if(v.amplitude != uploaded_amplitude){
                cudaMemcpyToSymbol(c_amplitude, v.amplitude, v.n_materials*sizeof(double));
                uploaded_amplitude = v.amplitude;
@@ -363,7 +382,7 @@ namespace vcuda{
                }
                else{
                   bath_kernel <<< cu::grid_size, cu::block_size >>> (e ? d_s_e : d_s, out, cu::atoms::d_materials, d_rng,
-                                                                      n_atoms, n_modes, v.spectrum, v.white_amp, e);
+                                                                      n_atoms, n_modes, v.spectrum, e ? v.white_amp_e : v.white_amp, e);
                }
             }
             check_cuda_errors(__FILE__, __LINE__);

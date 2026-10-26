@@ -369,6 +369,9 @@ Width $\tilde{\Gamma}$ of the Lorentzian, from the same fit. Must be greater tha
 {\zicf material:quantum-ohmic-damping = float [ 0-10 : default 0 ]}\phantomsection\addcontentsline{toc}{subsection}{material:quantum-ohmic-damping}
 Gilbert damping $\alpha_e$ of a second, Ohmic bath acting directly on the spin in the open-system LLG (\textit{sim:integrator = llg-quantum}): the combined thermostat, in which the Lorentzian oscillator plays the phonon bath and the Ohmic bath the electron bath. The spin then obeys $\dot{\mathbf{S}} = \mathbf{S}\times(\mathbf{H}+\mathbf{q}+\mathbf{b}) - \alpha_e\,\mathbf{S}\times\dot{\mathbf{S}}$, where $\mathbf{b}$ is a noise field with the spectral density of \textit{quantum:noise-type}, independent of the oscillator noise and normalised as the coloured bath of \texttt{llg-heun} with $\alpha_e$ in place of $\alpha$. \textit{material:damping-constant} remains the strength of the Lorentzian, so the total low-frequency damping is $\alpha + \alpha_e$, while above $\omega_0$ only the Ohmic bath remains. The default 0 is the plain open-system LLG. Supported with the on-the-fly noise generator only.
 
+{\zicf material:quantum-lorentzian-damping = float [ 0-10 : default damping-constant ]}\phantomsection\addcontentsline{toc}{subsection}{material:quantum-lorentzian-damping}
+Damping $\alpha_L$ of the Lorentzian (phonon) bath of the open-system LLG, entering the coupling $A = \alpha_L\,\omega_0^4/\Gamma$. If it is not given, \textit{material:damping-constant} is used. Together with \textit{material:quantum-ohmic-damping} ($\alpha_O$) it makes the two damping channels of the combined thermostat explicit in the input.
+
 
 {\zicf material:coupling-C0=float [ 0-1 : default 0.5]}\phantomsection\addcontentsline{toc}{subsection}{material:coupling-C0}  prefactor for the coupling function for SLD module; various coupling options available such as pseudodipolar or full-neel.
 

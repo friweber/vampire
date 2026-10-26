@@ -867,6 +867,9 @@ Selects the spectral density of the thermal noise. Available options are \textit
 {\zicf quantum:noise-generator = exclusive string [default on-the-fly]}\phantomsection\addcontentsline{toc}{subsection}{quantum:noise-generator}
 Selects how the coloured noise is generated. \textit{on-the-fly} propagates a set of auxiliary Ornstein-Uhlenbeck modes for every spin at each time step and follows changes of the temperature during the simulation. \textit{pre-generated} shapes white noise in frequency space with a fast Fourier transform, which is cheaper per step but needs memory proportional to the number of atoms times the window length, freezes the spectrum at the initial temperature, and requires a program with a fixed run length.
 
+{\zicf quantum:lorentzian-bath-temperature = exclusive string [default electron]}\phantomsection\addcontentsline{toc}{subsection}{quantum:lorentzian-bath-temperature}
+Temperature of the Lorentzian (phonon) bath of \textit{sim:integrator = llg-quantum}. \textit{electron}: \textit{sim:temperature}, as every other bath. \textit{phonon}: the phonon temperature $T_p$ of the two-temperature model, while the Ohmic (electron) bath of \textit{material:quantum-ohmic-damping} stays at the electron temperature $T_e$. Requires \textit{sim:program = laser-pulse} with a two-temperature pump (\textit{sim:laser-pulse-temporal-profile = two-temperature} or \textit{double-pulse-two-temperature}).
+
 {\zicf quantum:bath-modes = integer [default 30]}\phantomsection\addcontentsline{toc}{subsection}{quantum:bath-modes}
 Number of auxiliary modes per spin and component for the on-the-fly generator. More modes reproduce the target spectrum over a wider frequency range at a proportionally higher cost per step.
 

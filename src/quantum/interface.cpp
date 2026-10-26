@@ -139,6 +139,15 @@ namespace quantum{
          return true;
       }
       //--------------------------------------------------------------------
+      test="lorentzian-bath-temperature";
+      if(word==test){
+         test="electron";
+         if(value==test){ internal::lorentzian_phonon_T = false; return true; }
+         test="phonon";
+         if(value==test){ internal::lorentzian_phonon_T = true; return true; }
+         err::fatal("Error - value for \'quantum:" + word + "\' must be one of: \"electron\" or \"phonon\"");
+      }
+      //--------------------------------------------------------------------
       test="export-noise-atom";
       if(word==test){
          int a = vin::str_to_uint64(value);
@@ -184,7 +193,16 @@ namespace quantum{
          return true;
       }
       //--------------------------------------------------------------------
-      // Ohmic (electron) bath of the combined thermostat, llg-quantum only
+      // Lorentzian (phonon) damping alpha_L of llg-quantum; unset: damping-constant
+      test="quantum-lorentzian-damping";
+      if(word==test){
+         double alpha_L = vin::str_to_double(value);
+         vin::check_for_valid_value(alpha_L, word, line, prefix, unit, "none", 0.0, 10.0, "material", "0 - 10");
+         internal::mp[super_index].alpha_L.set(alpha_L);
+         return true;
+      }
+      //--------------------------------------------------------------------
+      // Ohmic (electron) bath alpha_O of the combined thermostat, llg-quantum only
       test="quantum-ohmic-damping";
       if(word==test){
          double alpha_e = vin::str_to_double(value);

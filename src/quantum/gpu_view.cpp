@@ -80,25 +80,46 @@ namespace quantum{
       v.gamma = material_gamma.data();
       v.omega0 = material_omega0.data();
 
-      // combined thermostat: the Ohmic bath has the spectrum, temperature and step of the
-      // spin bath, hence the same coefficients; only its amplitudes differ
+      // combined thermostat: the Ohmic bath has the spectrum and step of the spin bath and
+      // its own temperature (T_e; the Lorentzian may follow T_p), hence its own coefficients
       v.ohmic = (mode == thermostat && ohmic) ? 1 : 0;
       v.alpha_e = material_alpha_e.data();
       v.amplitude_e = ohmic_bath.amp.data();
+      v.T_scaled_e = 0.0; v.white_amp_e = 0.0;
+      v.e0 = v.e1 = v.e2 = v.e3 = 0;
+      if(v.ohmic && b.spectrum != classical){
+         bath_t& e = ohmic_bath;
+         refresh_temperature(e);
+         v.T_scaled_e = e.last_T_scaled;
+         if(e.spectrum == quantum_zero){
+            v.e0 = e.ou_decay.data(); v.e1 = e.ou_diffuse.data(); v.e2 = e.ou_drift.data(); v.e3 = e.ou_noise_amp.data();
+            v.white_amp_e = e.white_amp;
+         }
+         else{
+            v.e0 = e.lb_decay.data(); v.e1 = e.lb_coeff.data(); v.e2 = e.lb_amp.data();
+         }
+      }
 
       // classical open-system thermostat: white noise with the prefactor of draw_white_thermostat()
       v.white.assign(v.n_materials, 0.0);
       v.white_e.assign(v.n_materials, 0.0);
       if(mode == thermostat && b.spectrum == classical){
          for(int m = 0; m < v.n_materials; m++){
-            double T = sim::temperature;
-            if(sim::local_temperature) T = mp::material[m].temperature;
+            double T = bath_temperature(b);
+            if(sim::local_temperature && !b.T_source) T = mp::material[m].temperature;
             const double a  = mp::material[m].temperature_rescaling_alpha;
             const double Tc = mp::material[m].temperature_rescaling_Tc;
             const double T_rescaled = (T < Tc) ? Tc*std::pow(T/Tc, a) : T;
             const double T_scaled = T_rescaled*b.T_scale;
             v.white[m] = std::sqrt(2.0*material_gamma[m]*material_A[m]*T_scaled/(material_S0[m]*b.dt));
-            if(v.ohmic) v.white_e[m] = std::sqrt(2.0*material_alpha_e[m]*T_scaled/(material_S0[m]*b.dt));
+            if(v.ohmic){
+               // the Ohmic bath is at sim::temperature (T_e), with the same material temperature and rescaling rules
+               double Te = sim::temperature;
+               if(sim::local_temperature) Te = mp::material[m].temperature;
+               const double Te_rescaled = (Te < Tc) ? Tc*std::pow(Te/Tc, a) : Te;
+               const double Te_scaled = Te_rescaled*b.T_scale;
+               v.white_e[m] = std::sqrt(2.0*material_alpha_e[m]*Te_scaled/(material_S0[m]*b.dt));
+            }
          }
       }
 

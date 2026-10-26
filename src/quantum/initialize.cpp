@@ -180,7 +180,8 @@ namespace quantum{
 
          for(int m = 0; m < n_mat; m++){
 
-            const double alpha = mp::material[m].alpha;
+            // alpha_L: material:quantum-lorentzian-damping if given, else material:damping-constant
+            const double alpha = mp[m].alpha_L.is_set() ? mp[m].alpha_L.get() : mp::material[m].alpha;
             const double gamma = mp[m].gamma.get();
             const double omega0 = mp[m].omega0.get();
 
@@ -226,6 +227,18 @@ namespace quantum{
             ohmic_bath.coupling = material_alpha_e;
          }
          allocate_thermostat(n);
+
+         // two-temperature model: the Lorentzian (phonon) bath follows T_p, the
+         // Ohmic (electron) bath and everything else T_e = sim::temperature
+         if(lorentzian_phonon_T){
+            const bool tt_pump = program::pump_function == program::two_temperature ||
+                                 program::pump_function == program::double_pump_two_temperature;
+            if(program::program != program::program_t::laser_pulse || !tt_pump){
+               err::fatal("Error - quantum:lorentzian-bath-temperature = phonon needs sim:program = laser-pulse with a "
+                          "two-temperature pump (laser-pulse-temporal-profile = two-temperature or double-pulse-two-temperature).");
+            }
+            spin_bath.T_source = &program::TTTp;
+         }
 
          mode = thermostat;
 
@@ -363,6 +376,10 @@ namespace quantum{
          }
       }
 
+      if(lorentzian_phonon_T && mode != thermostat){
+         err::warning("Warning - quantum:lorentzian-bath-temperature is used by sim:integrator = llg-quantum only and is ignored here.");
+      }
+
       if(mode == inactive) return;
 
       // GPU: the CUDA module runs the on-the-fly (HO) baths and the open-system
@@ -417,6 +434,7 @@ namespace quantum{
              << ", " << spin_bath.n_sites << " atoms";
       if(coloured && noise_generator == on_the_fly) banner << ", " << n_bath_modes << " bath modes";
       if(lattice_bath.n_sites > 0) banner << ", lattice bath";
+      if(mode == thermostat && lorentzian_phonon_T) banner << ", Lorentzian bath at the 2TM phonon temperature";
       zlog << zTs() << banner.str() << std::endl;
 
       return;

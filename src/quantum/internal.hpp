@@ -83,6 +83,7 @@ namespace quantum{
             set_double_t gamma;   // Lorentzian width (rad/s)
             set_double_t omega0;  // Lorentzian central frequency (rad/s)
             set_double_t alpha_e; // Ohmic damping of the combined thermostat (0 = Lorentzian only)
+            set_double_t alpha_L; // Lorentzian damping; unset: material:damping-constant
 
             // constructor
             mp_t (){
@@ -152,6 +153,7 @@ namespace quantum{
             std::vector<double> amp_eq; // per-material output amplitude during equilibration
             std::vector<double> coupling; // classical thermostat: per-material damping strength,
                                           // Gamma A (oscillator) or alpha_e (Ohmic field)
+            const double* T_source; // bath temperature in Kelvin; 0 = sim::temperature
             // Matsubara Ornstein-Uhlenbeck modes (quantum_zero)
             std::vector<double> ou_decay;
             std::vector<double> ou_diffuse;
@@ -178,7 +180,7 @@ namespace quantum{
             // constructor
             bath_t () : spectrum(classical), generator(on_the_fly), lorentzian(false),
                         n_sites(0), n_modes(0), dt(0.0), T_scale(0.0),
-                        last_T_scaled(0.0), white_amp(0.0) { };
+                        last_T_scaled(0.0), T_source(0), white_amp(0.0) { };
       };
 
       //-------------------------------------------------------------------------
@@ -207,6 +209,7 @@ namespace quantum{
       extern bath_t lattice_bath;         // lattice bath (spin-lattice only)
       extern bath_t ohmic_bath;           // Ohmic (electron) field of the combined thermostat
       extern bool ohmic;                  // thermostat with Ohmic bath (some alpha_e > 0)
+      extern bool lorentzian_phonon_T;    // Lorentzian bath at the 2TM phonon temperature
 
       extern bool lattice_parameters_set;            // set_lattice_parameters() was called
       extern std::vector<double> lattice_mass;       // per-material atomic mass (eV ps^2/A^2)
@@ -253,6 +256,7 @@ namespace quantum{
       void refresh_temperature(bath_t& b);
       void draw(bath_t& b);
       void draw_white_thermostat(bath_t& b);
+      double bath_temperature(const bath_t& b);
 
       // bath_ou.cpp
       void ou_coefficients(bath_t& b, const double T_scaled);

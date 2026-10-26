@@ -48,6 +48,7 @@ namespace quantum{
       bath_t lattice_bath;                    // lattice bath (spin-lattice only)
       bath_t ohmic_bath;                      // Ohmic (electron) field, combined thermostat only
       bool ohmic = false;                     // combined thermostat (some alpha_e > 0)
+      bool lorentzian_phonon_T = false;       // quantum:lorentzian-bath-temperature = phonon
 
       bool lattice_parameters_set = false;    // spin-lattice handed over its parameters
       std::vector<double> lattice_mass;       // eV ps^2/A^2

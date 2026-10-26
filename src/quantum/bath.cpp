@@ -88,14 +88,23 @@ namespace quantum{
       }
 
       //---------------------------------------------------------------------------
-      // Function to rebuild the temperature dependent coefficients when
-      // sim::temperature has moved (on-the-fly generator only)
+      // Temperature of a bath in Kelvin: sim::temperature, or the quantity the
+      // bath was pointed at (the 2TM phonon temperature for the Lorentzian bath
+      // with quantum:lorentzian-bath-temperature = phonon)
+      //---------------------------------------------------------------------------
+      double bath_temperature(const bath_t& b){
+         return b.T_source ? *b.T_source : sim::temperature;
+      }
+
+      //---------------------------------------------------------------------------
+      // Function to rebuild the temperature dependent coefficients when the
+      // bath temperature has moved (on-the-fly generator only)
       //---------------------------------------------------------------------------
       void refresh_temperature(bath_t& b){
 
          if(b.generator != on_the_fly || b.spectrum == classical) return;
 
-         const double T_scaled = sim::temperature*b.T_scale;
+         const double T_scaled = bath_temperature(b)*b.T_scale;
          if(T_scaled == b.last_T_scaled) return;
 
          if(b.spectrum == quantum_zero) ou_coefficients(b, T_scaled);
@@ -150,14 +159,15 @@ namespace quantum{
       // sqrt(2 c T/(S0 dt)) balances the damping c = b.coupling: Gamma A for the
       // Lorentzian oscillator, alpha_e for the Ohmic field of the combined
       // thermostat. The temperature carries the per-material rescaling that
-      // the classical thermal field applies.
+      // the classical thermal field applies; a bath with its own temperature
+      // source (2TM phonon temperature) ignores material temperatures.
       //---------------------------------------------------------------------------
       void draw_white_thermostat(bath_t& b){
 
          std::vector<double> T_scaled_mat(mp::material.size());
          for(size_t m = 0; m < mp::material.size(); m++){
-            double T = sim::temperature;
-            if(sim::local_temperature) T = mp::material[m].temperature;
+            double T = bath_temperature(b);
+            if(sim::local_temperature && !b.T_source) T = mp::material[m].temperature;
             const double a  = mp::material[m].temperature_rescaling_alpha;
             const double Tc = mp::material[m].temperature_rescaling_Tc;
             const double T_rescaled = (T < Tc) ? Tc*std::pow(T/Tc, a) : T;

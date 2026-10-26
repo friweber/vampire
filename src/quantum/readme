@@ -72,6 +72,18 @@
 //   alpha_e = 0 for every material is the plain open-system LLG, bit for
 //   bit. On-the-fly generator only (CPU, MPI and GPU).
 //
+//   Notation: alpha_L = Lorentzian (phonon) damping, alpha_O = alpha_e =
+//   Ohmic (electron) damping. alpha_L is material:quantum-lorentzian-damping
+//   if given, else material:damping-constant.
+//
+//   Two-temperature model: quantum:lorentzian-bath-temperature = phonon lets
+//   the Lorentzian bath follow the phonon temperature T_p of the 2TM
+//   (program::TTTp), while the Ohmic bath and everything else follow T_e =
+//   sim:temperature. Only with sim:program = laser-pulse and a
+//   two-temperature pump (single or double pulse); refused otherwise.
+//   Default electron: both baths at sim:temperature, as before. On the GPU
+//   each bath carries its own coefficient set for this reason.
+//
 //   Generators
 //   ----------
 //   on-the-fly (default): auxiliary Ornstein-Uhlenbeck modes per site and
@@ -133,9 +145,11 @@
 //   quantum:bath-scan-decades       width of the log-bath search box
 //   quantum:export-noise [= file]   write the noise seen by one atom
 //   quantum:export-noise-atom       which atom (default 0)
+//   quantum:lorentzian-bath-temperature  electron (default) | phonon (2TM T_p)
 //   material:quantum-lorentzian-width              Gamma, reduced units
 //   material:quantum-lorentzian-central-frequency  omega0, reduced units
-//   material:quantum-ohmic-damping                 alpha_e, combined thermostat
+//   material:quantum-ohmic-damping                 alpha_O = alpha_e, combined thermostat
+//   material:quantum-lorentzian-damping            alpha_L (default: damping-constant)
 //
 //   Files
 //   -----
