@@ -408,7 +408,9 @@ namespace quantum{
          }
       }
 
-      if(export_noise) export_open((mode == thermostat) ? "auxiliary oscillator q" : "spin bath sample");
+      if(export_noise) export_open((mode == thermostat) ? ((noise_generator == pre_generated) ? "bath field q + pre-generated sample"
+                                                                                            : "bath field (auxiliary oscillator q)")
+                                                       : "spin bath sample");
 
       std::ostringstream banner;
       banner << "Initialising quantum noise module: "
