@@ -215,12 +215,23 @@ namespace quantum{
       }
 
       //---------------------------------------------------------------------------
-      // Function to export the auxiliary oscillator of one atom, the field the
-      // spin sees from the bath
+      // Function to export the field the spin of one atom sees from the
+      // Lorentzian bath. On the fly the noise drives the auxiliary oscillator,
+      // so that field is q. Pre-generated, the Lorentzian-shaped sample is added
+      // to the spin field directly and q carries only the response to the spin,
+      // so the field is q plus the sample. Both include the response A S of the
+      // oscillator to the spin. The Ohmic field of the combined thermostat
+      // (quantum-ohmic-damping) is a separate bath and is not exported.
       //---------------------------------------------------------------------------
       void export_thermostat_sample(){
 
-         if(export_noise) export_sample(q_x[export_atom], q_y[export_atom], q_z[export_atom]);
+         if(!export_noise) return;
+
+         const int a = export_atom;
+         if(spin_bath.generator == pre_generated){
+            export_sample(q_x[a] + spin_bath.x[a], q_y[a] + spin_bath.y[a], q_z[a] + spin_bath.z[a]);
+         }
+         else export_sample(q_x[a], q_y[a], q_z[a]);
 
          return;
 
