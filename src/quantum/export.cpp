@@ -33,8 +33,9 @@ namespace quantum{
 
       //---------------------------------------------------------------------------
       // Function to open the export file and write its header. source names
-      // the quantity that follows: the auxiliary oscillator of the thermostat
-      // or the bath sample added to the effective field.
+      // the quantity that follows: for the thermostat the Lorentzian bath field
+      // on the spin (q, plus the sample when pre-generated), otherwise the bath
+      // sample added to the effective field.
       //---------------------------------------------------------------------------
       void export_open(const char* source){
 
