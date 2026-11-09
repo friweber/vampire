@@ -84,4 +84,17 @@ namespace quantum{
 
    } // end of internal namespace
 
+   //---------------------------------------------------------------------------
+   // GPU interface of the export: the CUDA module copies the field of the
+   // export atom to the host once per step and hands it over here, at the
+   // same point of the step as the CPU steppers
+   //---------------------------------------------------------------------------
+   int gpu_export_atom(){
+      return internal::export_noise ? internal::export_atom : -1;
+   }
+
+   void gpu_export_sample(const double x, const double y, const double z){
+      internal::export_sample(x, y, z);
+   }
+
 } // end of quantum namespace

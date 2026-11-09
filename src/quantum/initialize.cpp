@@ -366,17 +366,14 @@ namespace quantum{
       if(mode == inactive) return;
 
       // GPU: the CUDA module runs the on-the-fly (HO) baths and the open-system
-      // LLG on the device. Pre-generated noise, noise export, spin-lattice and
-      // MPI builds stay on the CPU.
+      // LLG on the device (noise export: one device-to-host copy per step).
+      // Pre-generated noise, spin-lattice and MPI builds stay on the CPU.
       if(gpu::acceleration){
          #ifdef MPICF
             err::fatal("Error - the quantum noise module on the GPU is not available in MPI builds; use the CUDA (serial) build.");
          #endif
          if(noise_generator == pre_generated){
             err::fatal("Error - quantum:noise-generator = pre-generated is not supported with gpu:acceleration; the GPU generates the noise on the fly (HO method).");
-         }
-         if(export_noise){
-            err::fatal("Error - quantum:export-noise is not supported with gpu:acceleration; export the noise from a CPU run.");
          }
          if(mode == bath && integrate::integrator != integrate::integrator_t::llg_heun){
             err::fatal("Error - coloured quantum noise on the GPU is supported with sim:integrator = llg-heun and llg-quantum only.");
