@@ -51,6 +51,7 @@ namespace quantum{
 
       v.mode = (mode == thermostat) ? 1 : (mode == bath) ? 2 : 0;
       v.spectrum = (b.spectrum == classical) ? 0 : (b.spectrum == quantum_zero) ? 1 : 2;
+      v.pregenerated = (b.generator == pre_generated) ? 1 : 0;
       v.n_modes = b.n_modes;
       v.n_materials = static_cast<int>(mp::material.size());
       v.dt = mp::dt;
@@ -58,7 +59,12 @@ namespace quantum{
       if(b.spectrum != classical) refresh_temperature(b);
       v.T_scaled = b.last_T_scaled;
 
-      if(b.spectrum == quantum_zero){
+      // pre-generated: no device bath, hence no coefficients (gpu_pregenerated_draw supplies the sample)
+      if(v.pregenerated){
+         v.c0 = v.c1 = v.c2 = v.c3 = 0;
+         v.white_amp = 0.0;
+      }
+      else if(b.spectrum == quantum_zero){
          v.c0 = b.ou_decay.data();
          v.c1 = b.ou_diffuse.data();
          v.c2 = b.ou_drift.data();
@@ -89,7 +95,7 @@ namespace quantum{
       // classical open-system thermostat: white noise with the prefactor of draw_white_thermostat()
       v.white.assign(v.n_materials, 0.0);
       v.white_e.assign(v.n_materials, 0.0);
-      if(mode == thermostat && b.spectrum == classical){
+      if(mode == thermostat && b.spectrum == classical && !v.pregenerated){
          for(int m = 0; m < v.n_materials; m++){
             double T = sim::temperature;
             if(sim::local_temperature) T = mp::material[m].temperature;
@@ -101,6 +107,26 @@ namespace quantum{
             if(v.ohmic) v.white_e[m] = std::sqrt(2.0*material_alpha_e[m]*T_scaled/(material_S0[m]*b.dt));
          }
       }
+
+      return;
+
+   }
+
+   //---------------------------------------------------------------------------
+   // Function to draw this step's pre-generated (FFT) sample of the spin bath on
+   // the host, with the CPU generator itself (windows, interpolation, amplitude
+   // of the phase), and to return it for the upload to the device. Called once
+   // per step by the CUDA module; the same seed gives the same noise as a CPU run.
+   //---------------------------------------------------------------------------
+   void gpu_pregenerated_draw(const double*& x, const double*& y, const double*& z){
+
+      using namespace internal;
+
+      draw(spin_bath);
+
+      x = spin_bath.x.data();
+      y = spin_bath.y.data();
+      z = spin_bath.z.data();
 
       return;
 

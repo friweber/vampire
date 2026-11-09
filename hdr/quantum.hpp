@@ -80,11 +80,14 @@ namespace quantum{
    // GPU interface. The CUDA module integrates the coloured bath and the
    // open-system LLG on the device; the host keeps the bath coefficients
    // (built for the current temperature) and hands them over through this
-   // view once per step. Nothing here draws random numbers.
+   // view once per step. Nothing here draws random numbers, except
+   // gpu_pregenerated_draw(): the pre-generated (FFT) noise is produced on the
+   // host by the CPU generator and uploaded once per step.
    //---------------------------------------------------------------------------
    struct gpu_view_t{
       int mode;            // 0 inactive, 1 open-system LLG (llg-quantum), 2 coloured bath (llg-heun)
       int spectrum;        // 0 classical, 1 quantum, 2 quantum-no-zero
+      int pregenerated;    // 1: pre-generated (FFT) noise from the host, no device bath
       int n_modes;         // auxiliary modes per site and component
       int n_materials;
       double T_scaled;     // reduced temperature the coefficients belong to
@@ -109,6 +112,7 @@ namespace quantum{
    bool gpu_bath();                  // coloured bath for llg-heun on the GPU
    bool gpu_thermostat();            // open-system LLG on the GPU
    void gpu_view(gpu_view_t& view);  // refresh the coefficients for sim::temperature and fill the view
+   void gpu_pregenerated_draw(const double*& x, const double*& y, const double*& z); // this step's pre-generated sample (host)
    int gpu_export_atom();            // atom of quantum:export-noise, -1 when the export is off
    void gpu_export_sample(const double x, const double y, const double z); // append one exported sample
 

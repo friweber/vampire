@@ -23,6 +23,13 @@
 //      0): a second bath of the same spectrum, the Ohmic (electron) bath,
 //      adds its field and a Gilbert damping alpha_e to the spin equation.
 //
+//   3. Pre-generated (FFT) noise, for both: the sample of every atom is drawn on
+//      the host by the CPU generator (src/quantum/bath_fft.cpp) and uploaded
+//      once per step; llg-heun uses it as the thermal field, the open-system
+//      LLG adds it to the spin field (the Lorentzian is in its spectrum) and
+//      integrates the oscillator without noise (fft_equation_of_motion). The
+//      host RNG then draws exactly what a CPU run with the same seed draws.
+//
 //   The host keeps the bath coefficients (rebuilt when sim::temperature moves,
 //   lambda_k rescaled with T for the log bath) and uploads them to constant
 //   memory only when they change. Random numbers: one Philox stream per thread.
@@ -86,6 +93,7 @@ namespace vcuda{
          int spectrum = 0;
          int mode = 0;
          int ohmic = 0;
+         int pregen = 0;       // pre-generated (FFT) noise from the host
          double uploaded_T = -1.0;
          const double* uploaded_amplitude = 0;
 
@@ -99,6 +107,9 @@ namespace vcuda{
          double* d_k = 0;      // RK4 slopes, [4][9][atom]
          double* d_s_e = 0;    // combined thermostat: Ohmic bath mode states, as d_s
          double* d_noise_e = 0; // combined thermostat: Ohmic field sample, as d_noise
+         const double* h_x = 0; // pre-generated: this step's host sample (export of the thermostat)
+         const double* h_y = 0;
+         const double* h_z = 0;
 
          //---------------------------------------------------------------------
          // Kernels
@@ -222,7 +233,8 @@ namespace vcuda{
                                       const cu_real_t* hsx, const cu_real_t* hsy, const cu_real_t* hsz,
                                       const cu_real_t* hex, const cu_real_t* hey, const cu_real_t* hez,
                                       const double* noise, const double* noise_e, const int* material,
-                                      cu_real_t* sx, cu_real_t* sy, cu_real_t* sz, const int n_atoms){
+                                      cu_real_t* sx, cu_real_t* sy, cu_real_t* sz, const int n_atoms,
+                                      const int pregen){
             const size_t N = n_atoms;
             const double* ysrc = (stage == 1) ? yin : ypred;
             double* k = k_all + static_cast<size_t>(stage - 1)*9*N;
@@ -235,7 +247,12 @@ namespace vcuda{
                H[2] = hsz[atom] + hez[atom];
                xi[0] = noise[atom]; xi[1] = noise[N + atom]; xi[2] = noise[2*N + atom];
                const int m = material[atom];
-               if(noise_e){
+               if(pregen){
+                  // pre-generated: the Lorentzian-shaped sample acts on the spin, the oscillator has no noise
+                  H[0] += xi[0]; H[1] += xi[1]; H[2] += xi[2];
+                  quantum::internal::fft_equation_of_motion(y, H, c_A[m], c_gamma[m], c_omega0[m], dydt);
+               }
+               else if(noise_e){
                   const double h_e[3] = {noise_e[atom], noise_e[N + atom], noise_e[2*N + atom]};
                   quantum::internal::ho_ohmic_equation_of_motion(y, H, xi, h_e, c_A[m], c_gamma[m], c_omega0[m], c_alpha_e[m], dydt);
                }
@@ -283,8 +300,9 @@ namespace vcuda{
             spectrum = v.spectrum;
             mode = v.mode;
             ohmic = v.ohmic;
+            pregen = v.pregenerated;
 
-            if(n_modes > max_modes) err::fatal("Error - quantum:bath-modes exceeds the GPU limit of 256.");
+            if(!pregen && n_modes > max_modes) err::fatal("Error - quantum:bath-modes exceeds the GPU limit of 256.");
             if(v.n_materials > max_materials) err::fatal("Error - the quantum module on the GPU supports at most 64 materials.");
 
             const int n_threads = cu::grid_size*cu::block_size;
@@ -294,7 +312,7 @@ namespace vcuda{
             const size_t N = n_atoms;
             cudaMalloc((void**)&d_noise, 3*N*sizeof(double));
             cudaMemset(d_noise, 0, 3*N*sizeof(double));
-            if(spectrum != 0){
+            if(spectrum != 0 && !pregen){
                cudaMalloc((void**)&d_s, 3*N*n_modes*sizeof(double));
                cudaMemset(d_s, 0, 3*N*n_modes*sizeof(double));   // as the CPU bath: modes start from zero
             }
@@ -324,8 +342,10 @@ namespace vcuda{
             check_cuda_errors(__FILE__, __LINE__);
 
             zlog << zTs() << "Quantum module on the GPU: " << (mode == 1 ? (ohmic ? "open-system LLG + Ohmic bath (RK4)" : "open-system LLG (RK4)") : "coloured bath for llg-heun")
-                 << ", spectrum " << (spectrum == 0 ? "classical" : spectrum == 1 ? "quantum (Matsubara OU)" : "quantum-no-zero (log OU)")
-                 << ", " << n_modes << " modes, " << n_atoms << " atoms" << std::endl;
+                 << ", spectrum " << (spectrum == 0 ? "classical" : spectrum == 1 ? "quantum" : "quantum-no-zero")
+                 << (pregen ? ", pre-generated (FFT on the host, one upload per step)"
+                            : (spectrum == 0 ? ", white noise" : spectrum == 1 ? ", Matsubara OU modes" : ", log-spaced OU modes"))
+                 << ", " << (pregen ? 0 : n_modes) << " modes, " << n_atoms << " atoms" << std::endl;
 
             initialised = true;
             return;
@@ -335,7 +355,7 @@ namespace vcuda{
          void prepare(quantum::gpu_view_t& v){
             if(!initialised) initialise();
             quantum::gpu_view(v);
-            if(v.spectrum != 0 && v.T_scaled != uploaded_T){
+            if(!pregen && v.spectrum != 0 && v.T_scaled != uploaded_T){
                cudaMemcpyToSymbol(c_c0, v.c0, n_modes*sizeof(double));
                cudaMemcpyToSymbol(c_c1, v.c1, n_modes*sizeof(double));
                cudaMemcpyToSymbol(c_c2, v.c2, n_modes*sizeof(double));
@@ -346,7 +366,7 @@ namespace vcuda{
                cudaMemcpyToSymbol(c_amplitude, v.amplitude, v.n_materials*sizeof(double));
                uploaded_amplitude = v.amplitude;
             }
-            if(mode == 1 && v.spectrum == 0){
+            if(mode == 1 && v.spectrum == 0 && !pregen){
                // the classical prefactor carries the temperature: refresh every step (n_materials doubles)
                cudaMemcpyToSymbol(c_white, v.white.data(), v.n_materials*sizeof(double));
                if(ohmic) cudaMemcpyToSymbol(c_white_e, v.white_e.data(), v.n_materials*sizeof(double));
@@ -355,6 +375,17 @@ namespace vcuda{
          }
 
          void draw(const quantum::gpu_view_t& v){
+            // pre-generated: the CPU generator draws on the host, one upload per step
+            // ([component][atom], as the device baths write it)
+            if(pregen){
+               quantum::gpu_pregenerated_draw(h_x, h_y, h_z);
+               const size_t N = n_atoms;
+               cudaMemcpy(d_noise,         h_x, N*sizeof(double), cudaMemcpyHostToDevice);
+               cudaMemcpy(d_noise + N,     h_y, N*sizeof(double), cudaMemcpyHostToDevice);
+               cudaMemcpy(d_noise + 2*N,   h_z, N*sizeof(double), cudaMemcpyHostToDevice);
+               check_cuda_errors(__FILE__, __LINE__);
+               return;
+            }
             // the Ohmic bath of the combined thermostat shares the coefficients, not the samples
             for(int e = 0; e <= ohmic; e++){
                double* out = e ? d_noise_e : d_noise;
@@ -370,13 +401,16 @@ namespace vcuda{
          }
 
          // quantum:export-noise: copy the field of the export atom ([component][atom]
-         // array on the device) to the host and append it to the export file
-         void export_field(const double* d_field){
+         // array on the device) to the host and append it to the export file;
+         // add_sample: plus this step's pre-generated host sample (thermostat: q + sample,
+         // as export_thermostat_sample() on the CPU)
+         void export_field(const double* d_field, const bool add_sample = false){
             const int a = quantum::gpu_export_atom();
             if(a < 0 || a >= n_atoms) return;
             const size_t N = n_atoms;
             double v[3];
             for(int c = 0; c < 3; c++) cudaMemcpy(&v[c], d_field + c*N + a, sizeof(double), cudaMemcpyDeviceToHost);
+            if(add_sample){ v[0] += h_x[a]; v[1] += h_y[a]; v[2] += h_z[a]; }
             quantum::gpu_export_sample(v[0], v[1], v[2]);
          }
 
@@ -425,21 +459,21 @@ namespace vcuda{
                                                              qg::d_q, qg::d_p, qg::d_yin, n);
       cu::update_spin_fields();
       cu::update_external_fields();     // applied (+FMR, dipole) fields only: the thermal part is off in this mode
-      qg::draw(v);                      // one bath sample per step, seen by all four stages
+      qg::draw(v);                      // one bath sample per step, seen by all four stages (pre-generated: from the host)
 
       for(int stage = 1; stage <= 4; stage++){
          qg::stage_kernel <<< cu::grid_size, cu::block_size >>> (stage, dt, qg::d_yin, qg::d_ypred, qg::d_k,
                cu::d_x_spin_field, cu::d_y_spin_field, cu::d_z_spin_field,
                cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field,
                qg::d_noise, qg::ohmic ? qg::d_noise_e : nullptr, cu::atoms::d_materials,
-               cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin, n);
+               cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin, n, qg::pregen);
          if(stage < 4) cu::update_spin_fields();
       }
 
       qg::finish_kernel <<< cu::grid_size, cu::block_size >>> (dt/6.0, qg::d_yin, qg::d_k,
             cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin, qg::d_q, qg::d_p, n);
       check_cuda_errors(__FILE__, __LINE__);
-      qg::export_field(qg::d_q);           // as export_thermostat_sample() on the CPU: q after the step
+      qg::export_field(qg::d_q, qg::pregen); // as export_thermostat_sample() on the CPU: q (+ sample) after the step
 
       return;
    }
