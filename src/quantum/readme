@@ -37,8 +37,10 @@
 //   GPU (gpu:acceleration, CUDA build): the on-the-fly baths of llg-heun and
 //   the open-system LLG run on the device (src/cuda/quantum.cu); the host
 //   keeps the bath coefficients and passes them through gpu_view() once per
-//   step. Pre-generated noise, noise export, spin-lattice dynamics and MPI
-//   builds stay on the CPU and are refused with gpu:acceleration.
+//   step. Noise export copies the field of the export atom to the host once
+//   per step (at the same point as the CPU steppers). Pre-generated noise,
+//   spin-lattice dynamics and MPI builds stay on the CPU and are refused with
+//   gpu:acceleration.
 //
 //   Spectra
 //   -------

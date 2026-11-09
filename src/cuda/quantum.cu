@@ -388,6 +388,17 @@ namespace vcuda{
             check_cuda_errors(__FILE__, __LINE__);
          }
 
+         // quantum:export-noise: copy the field of the export atom ([component][atom]
+         // array on the device) to the host and append it to the export file
+         void export_field(const double* d_field){
+            const int a = quantum::gpu_export_atom();
+            if(a < 0 || a >= n_atoms) return;
+            const size_t N = n_atoms;
+            double v[3];
+            for(int c = 0; c < 3; c++) cudaMemcpy(&v[c], d_field + c*N + a, sizeof(double), cudaMemcpyDeviceToHost);
+            quantum::gpu_export_sample(v[0], v[1], v[2]);
+         }
+
       } // end of quantum_gpu namespace
 
       //------------------------------------------------------------------------
@@ -401,6 +412,7 @@ namespace vcuda{
          qg::bath_to_field_kernel <<< cu::grid_size, cu::block_size >>> (qg::d_noise,
                cu::d_x_external_field, cu::d_y_external_field, cu::d_z_external_field, qg::n_atoms);
          check_cuda_errors(__FILE__, __LINE__);
+         qg::export_field(qg::d_noise);    // as quantum::generate() on the CPU: the bath sample of this step
       }
 
       void quantum_finalize(){
@@ -446,6 +458,7 @@ namespace vcuda{
       qg::finish_kernel <<< cu::grid_size, cu::block_size >>> (dt/6.0, qg::d_yin, qg::d_k,
             cu::atoms::d_x_spin, cu::atoms::d_y_spin, cu::atoms::d_z_spin, qg::d_q, qg::d_p, n);
       check_cuda_errors(__FILE__, __LINE__);
+      qg::export_field(qg::d_q);           // as export_thermostat_sample() on the CPU: q after the step
 
       return;
    }
