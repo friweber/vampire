@@ -39,6 +39,7 @@ namespace quantum{
 
       uint64_t window_size = 0;               // 0 = one window spanning the run
       int interpolation_factor = 1;           // fine steps per coarse sample
+      bool pre_generated_on_host = false;     // gpu:acceleration: false = windows on the GPU (cuFFT), true = host
 
       bool export_noise = false;              // export the injected noise of one atom
       std::string export_filename = "quantum-noise.dat"; // export file name

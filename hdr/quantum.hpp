@@ -87,7 +87,14 @@ namespace quantum{
    struct gpu_view_t{
       int mode;            // 0 inactive, 1 open-system LLG (llg-quantum), 2 coloured bath (llg-heun)
       int spectrum;        // 0 classical, 1 quantum, 2 quantum-no-zero
-      int pregenerated;    // 1: pre-generated (FFT) noise from the host, no device bath
+      int pregenerated;    // 1: pre-generated (FFT) noise, no OU bath on the device
+      int pregenerated_host; // 1: drawn on the host (gpu_pregenerated_draw), 0: windows on the GPU (cuFFT)
+      // pre-generated on the GPU: window of the overlap-save generator (src/quantum/bath_fft.cpp)
+      int fft_seg;         // segment length (coarse samples); FFT length 6 seg, 4 seg kept per window
+      int fft_M;           // fine steps per coarse sample (linear interpolation)
+      int fft_n_tables;    // filter tables: one per material (Lorentzian) or one
+      double fft_norm;     // output scale 1/(n_coarse sqrt(M dt))
+      const double* fft_sqrt_psd; // [table*(3 seg + 1) + k], sqrt of the filtered spectrum
       int n_modes;         // auxiliary modes per site and component
       int n_materials;
       double T_scaled;     // reduced temperature the coefficients belong to

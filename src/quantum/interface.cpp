@@ -100,6 +100,24 @@ namespace quantum{
          return true;
       }
       //--------------------------------------------------------------------
+      // where pre-generated noise is generated with gpu:acceleration: gpu
+      // (cuFFT, windows in device memory; default) or host (the CPU generator,
+      // one upload per step; the same noise as a CPU run with the same seed)
+      test="pre-generated-device";
+      if(word==test){
+         test="gpu";
+         if(value==test){
+            internal::pre_generated_on_host = false;
+            return true;
+         }
+         test="host";
+         if(value==test){
+            internal::pre_generated_on_host = true;
+            return true;
+         }
+         err::fatal("Error - value for \'quantum:" + word + "\' must be one of: \"gpu\" or \"host\"");
+      }
+      //--------------------------------------------------------------------
       test="bath-modes";
       if(word==test){
          int n = vin::str_to_uint64(value);

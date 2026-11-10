@@ -104,11 +104,13 @@ namespace quantum{
             int n_coarse;          // FFT length, 6*seg
             int seg;               // segment length in coarse samples
             int n_valid;           // 4*seg coarse samples kept per window
+            bool device;           // windows generated on the GPU (cuFFT): no host buffers or plans
             bool primed;           // false until the first window exists
             uint64_t step;         // fine step counter of this bath
             uint64_t window_start; // fine step at which the current window starts
             double norm;           // output scale, 1/(n_coarse*sqrt(M*dt))
             std::vector< std::vector<double> > sqrt_psd; // [material][n_coarse/2+1]
+            std::vector<double> sqrt_psd_flat;           // the same, flattened [table*(n_coarse/2+1) + k] (GPU)
             std::vector<double> tail;   // 2*seg white samples per realisation, carried over
             std::vector<double> coarse; // shaped coarse samples of the current window
             #ifdef FFT
@@ -120,7 +122,7 @@ namespace quantum{
             #endif
 
             // constructor
-            fft_t () : M(1), n_coarse(0), seg(0), n_valid(0), primed(false),
+            fft_t () : M(1), n_coarse(0), seg(0), n_valid(0), device(false), primed(false),
                        step(0), window_start(0), norm(0.0)
             {
                #ifdef FFT
@@ -198,6 +200,7 @@ namespace quantum{
 
       extern uint64_t window_size;        // pre-generated window in fine steps (0 = whole run)
       extern int interpolation_factor;    // fine steps per coarse sample
+      extern bool pre_generated_on_host;  // gpu:acceleration: draw pre-generated noise on the host (bit-identical to CPU)
 
       extern bool export_noise;           // write the injected noise of one atom
       extern std::string export_filename; // file for the noise export

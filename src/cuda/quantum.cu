@@ -23,12 +23,17 @@
 //      0): a second bath of the same spectrum, the Ohmic (electron) bath,
 //      adds its field and a Gilbert damping alpha_e to the spin equation.
 //
-//   3. Pre-generated (FFT) noise, for both: the sample of every atom is drawn on
-//      the host by the CPU generator (src/quantum/bath_fft.cpp) and uploaded
-//      once per step; llg-heun uses it as the thermal field, the open-system
-//      LLG adds it to the spin field (the Lorentzian is in its spectrum) and
-//      integrates the oscillator without noise (fft_equation_of_motion). The
-//      host RNG then draws exactly what a CPU run with the same seed draws.
+//   3. Pre-generated (FFT) noise, for both: llg-heun uses the sample as the
+//      thermal field, the open-system LLG adds it to the spin field (the
+//      Lorentzian is in its spectrum) and integrates the oscillator without
+//      noise (fft_equation_of_motion). Two generators:
+//      - GPU (default): the overlap-save windows of src/quantum/bath_fft.cpp
+//        are generated on the device with cuFFT (white noise from the Philox
+//        streams, batched D2Z, filter, Z2D) and interpolated per step by a
+//        kernel; the window lives in device memory, the host does nothing.
+//      - host (quantum:pre-generated-device = host): the CPU generator draws
+//        the sample and it is uploaded once per step; the host RNG then draws
+//        exactly what a CPU run with the same seed draws.
 //
 //   The host keeps the bath coefficients (rebuilt when sim::temperature moves,
 //   lambda_k rescaled with T for the log bath) and uploads them to constant
@@ -37,6 +42,9 @@
 //------------------------------------------------------------------------------
 
 // C++ standard library headers
+#include <algorithm>
+#include <sstream>
+#include <string>
 #include <vector>
 
 // Vampire headers
@@ -61,6 +69,7 @@
 #ifdef CUDA
 
 #include <curand_kernel.h>
+#include <cufft.h>
 
 namespace cu = vcuda::internal;
 
@@ -107,9 +116,24 @@ namespace vcuda{
          double* d_k = 0;      // RK4 slopes, [4][9][atom]
          double* d_s_e = 0;    // combined thermostat: Ohmic bath mode states, as d_s
          double* d_noise_e = 0; // combined thermostat: Ohmic field sample, as d_noise
-         const double* h_x = 0; // pre-generated: this step's host sample (export of the thermostat)
-         const double* h_y = 0;
-         const double* h_z = 0;
+         int pregen_host = 0;   // pre-generated on the host (one upload per step)
+
+         // pre-generated on the GPU: overlap-save window state (as fft_t in quantum/internal.hpp)
+         namespace fftg{
+            int seg = 0, nc = 0, nk = 0, nv = 0, M = 1, n_tables = 1, lorentzian = 0;
+            double norm = 0.0;
+            size_t R = 0;             // realisations, 3 per atom: r = 3*atom + component
+            int B = 0, B_last = 0;    // realisations per cuFFT batch, and in the last batch
+            bool primed = false;
+            uint64_t step = 0, window_start = 0;
+            double* d_tail = 0;       // [r][2 seg] white input carried over to the next window
+            double* d_coarse = 0;     // [r][4 seg] shaped coarse samples of the current window
+            double* d_work = 0;       // [b][6 seg] transform input / output of one batch
+            double* d_psd = 0;        // [table][3 seg + 1] filter
+            cufftDoubleComplex* d_spec = 0; // [b][3 seg + 1] spectrum of one batch
+            cufftHandle fwd = 0, bwd = 0, fwd_last = 0, bwd_last = 0;
+            bool has_last = false;    // plans for a shorter last batch exist
+         }
 
          //---------------------------------------------------------------------
          // Kernels
@@ -190,6 +214,75 @@ namespace vcuda{
                out[2*N + atom] = w*g.z;
             }
             states[tid] = rng;
+         }
+
+         //---------------------------------------------------------------------
+         // Pre-generated noise on the GPU: one window for the realisations
+         // r0 ... r0 + nb - 1 (see fft_generate_window in quantum/bath_fft.cpp)
+         //---------------------------------------------------------------------
+         // transform input: the carried-over context (fresh noise in the first window), then fresh white noise
+         __global__ void fft_fill_kernel(double* work, const double* tail, const size_t r0, const int nb,
+                                         const int nc, const int overlap, const int primed,
+                                         curandStatePhilox4_32_10_t* states){
+            const int tid = blockIdx.x*blockDim.x + threadIdx.x;
+            curandStatePhilox4_32_10_t rng = states[tid];
+            normal_source_t gauss(&rng);
+            const size_t total = static_cast<size_t>(nb)*nc;
+            for(size_t e = tid; e < total; e += static_cast<size_t>(blockDim.x)*gridDim.x){
+               const size_t b = e/nc;
+               const int i = static_cast<int>(e - b*nc);
+               work[e] = (primed && i < overlap) ? tail[(r0 + b)*overlap + i] : gauss.next();
+            }
+            states[tid] = rng;
+         }
+
+         // the last two input segments become the next window's context
+         __global__ void fft_save_tail_kernel(const double* work, double* tail, const size_t r0, const int nb,
+                                              const int nc, const int overlap, const int keep_from){
+            const size_t total = static_cast<size_t>(nb)*overlap;
+            for(size_t e = blockIdx.x*blockDim.x + threadIdx.x; e < total; e += static_cast<size_t>(blockDim.x)*gridDim.x){
+               const size_t b = e/overlap;
+               const int i = static_cast<int>(e - b*overlap);
+               tail[(r0 + b)*overlap + i] = work[b*nc + keep_from + i];
+            }
+         }
+
+         // filter: one table per material (thermostat) or one table (llg-heun bath)
+         __global__ void fft_filter_kernel(cufftDoubleComplex* spec, const double* psd, const int* material,
+                                           const size_t r0, const int nb, const int nk, const int lorentzian){
+            const size_t total = static_cast<size_t>(nb)*nk;
+            for(size_t e = blockIdx.x*blockDim.x + threadIdx.x; e < total; e += static_cast<size_t>(blockDim.x)*gridDim.x){
+               const size_t b = e/nk;
+               const int k = static_cast<int>(e - b*nk);
+               const int table = lorentzian ? material[(r0 + b)/3] : 0;
+               const double f = psd[static_cast<size_t>(table)*nk + k];
+               spec[e].x *= f;
+               spec[e].y *= f;
+            }
+         }
+
+         // keep the middle four segments, normalised
+         __global__ void fft_extract_kernel(const double* work, double* coarse, const size_t r0, const int nb,
+                                            const int nc, const int nv, const int seg, const double norm){
+            const size_t total = static_cast<size_t>(nb)*nv;
+            for(size_t e = blockIdx.x*blockDim.x + threadIdx.x; e < total; e += static_cast<size_t>(blockDim.x)*gridDim.x){
+               const size_t b = e/nv;
+               const int j = static_cast<int>(e - b*nv);
+               coarse[(r0 + b)*nv + j] = work[b*nc + seg + j]*norm;
+            }
+         }
+
+         // this step's sample: linear interpolation between coarse samples j and j + 1, times the amplitude
+         __global__ void fft_interpolate_kernel(const double* coarse, double* out, const int* material,
+                                                const int n_atoms, const int nv, const int j, const double frac){
+            const size_t N = n_atoms;
+            for(int atom = blockIdx.x*blockDim.x + threadIdx.x; atom < n_atoms; atom += blockDim.x*gridDim.x){
+               const double a = c_amplitude[material[atom]];
+               for(int c = 0; c < 3; c++){
+                  const size_t base = (3*static_cast<size_t>(atom) + c)*nv;
+                  out[c*N + atom] = a*(coarse[base + j]*(1.0 - frac) + coarse[base + j + 1]*frac);
+               }
+            }
          }
 
          // Copy the bath sample into the thermal (external) field arrays
@@ -290,6 +383,91 @@ namespace vcuda{
          //---------------------------------------------------------------------
          // Host functions
          //---------------------------------------------------------------------
+         static void cufft_check(const cufftResult r, const char* what){
+            if(r != CUFFT_SUCCESS){
+               err::fatal(std::string("Error - cuFFT failed (") + what + "), code " + std::to_string(static_cast<int>(r)) + ".");
+            }
+         }
+
+         // Pre-generated noise on the GPU: sizes from the host setup (fft_setup), buffers, plans
+         static void fft_initialise(const quantum::gpu_view_t& v){
+            namespace g = fftg;
+            g::seg = v.fft_seg; g::nc = 6*g::seg; g::nk = g::nc/2 + 1; g::nv = 4*g::seg; g::M = v.fft_M;
+            g::n_tables = v.fft_n_tables; g::lorentzian = (v.mode == 1) ? 1 : 0; g::norm = v.fft_norm;
+            g::R = 3*static_cast<size_t>(n_atoms);
+
+            // batch of realisations per transform: about 256 MiB of work buffers
+            const double per_realisation = g::nc*sizeof(double) + g::nk*sizeof(cufftDoubleComplex);
+            g::B = static_cast<int>(std::min<double>(static_cast<double>(g::R), std::max(1.0, 256.0*1024.0*1024.0/per_realisation)));
+            g::B_last = static_cast<int>(g::R - (g::R - 1)/g::B*g::B);
+
+            const double window = static_cast<double>(g::R)*(g::nv + 2*g::seg)*sizeof(double);
+            const double work = g::B*per_realisation + static_cast<double>(g::n_tables)*g::nk*sizeof(double);
+            size_t free_bytes = 0, total_bytes = 0;
+            cudaMemGetInfo(&free_bytes, &total_bytes);
+            if(window + work > 0.9*free_bytes){
+               std::ostringstream message;
+               message << "Error - pre-generated quantum noise on the GPU needs " << (window + work)/(1024.0*1024.0*1024.0)
+                       << " GiB of device memory, " << free_bytes/(1024.0*1024.0*1024.0) << " GiB are free. "
+                       << "Set quantum:noise-window-size to a smaller number of steps (memory grows with it), "
+                       << "or use quantum:pre-generated-device = host.";
+               err::fatal(message.str());
+            }
+
+            cudaMalloc((void**)&g::d_tail, g::R*2*g::seg*sizeof(double));
+            cudaMalloc((void**)&g::d_coarse, g::R*g::nv*sizeof(double));
+            cudaMalloc((void**)&g::d_work, static_cast<size_t>(g::B)*g::nc*sizeof(double));
+            cudaMalloc((void**)&g::d_spec, static_cast<size_t>(g::B)*g::nk*sizeof(cufftDoubleComplex));
+            cudaMalloc((void**)&g::d_psd, static_cast<size_t>(g::n_tables)*g::nk*sizeof(double));
+            cudaMemcpy(g::d_psd, v.fft_sqrt_psd, static_cast<size_t>(g::n_tables)*g::nk*sizeof(double), cudaMemcpyHostToDevice);
+
+            int n[1] = {g::nc};
+            cufft_check(cufftPlanMany(&g::fwd, 1, n, NULL, 1, g::nc, NULL, 1, g::nk, CUFFT_D2Z, g::B), "plan D2Z");
+            cufft_check(cufftPlanMany(&g::bwd, 1, n, NULL, 1, g::nk, NULL, 1, g::nc, CUFFT_Z2D, g::B), "plan Z2D");
+            g::has_last = (g::B_last != g::B);
+            if(g::has_last){
+               cufft_check(cufftPlanMany(&g::fwd_last, 1, n, NULL, 1, g::nc, NULL, 1, g::nk, CUFFT_D2Z, g::B_last), "plan D2Z");
+               cufft_check(cufftPlanMany(&g::bwd_last, 1, n, NULL, 1, g::nk, NULL, 1, g::nc, CUFFT_Z2D, g::B_last), "plan Z2D");
+            }
+            check_cuda_errors(__FILE__, __LINE__);
+
+            zlog << zTs() << "Quantum pre-generated noise on the GPU (cuFFT): " << g::R << " realisations, FFT length "
+                 << g::nc << ", window " << g::nv*g::M << " steps, " << (g::R + g::B - 1)/g::B << " batches of " << g::B
+                 << ", device memory " << (window + work)/(1024.0*1024.0) << " MiB" << std::endl;
+         }
+
+         // one window for every realisation, batch by batch (fft_generate_window)
+         static void fft_generate_window(){
+            namespace g = fftg;
+            const int overlap = 2*g::seg;
+            for(size_t r0 = 0; r0 < g::R; r0 += g::B){
+               const int nb = static_cast<int>(std::min<size_t>(g::B, g::R - r0));
+               const bool last = (nb != g::B);
+               fft_fill_kernel <<< cu::grid_size, cu::block_size >>> (g::d_work, g::d_tail, r0, nb, g::nc, overlap, g::primed ? 1 : 0, d_rng);
+               fft_save_tail_kernel <<< cu::grid_size, cu::block_size >>> (g::d_work, g::d_tail, r0, nb, g::nc, overlap, 4*g::seg);
+               cufft_check(cufftExecD2Z(last ? g::fwd_last : g::fwd, g::d_work, g::d_spec), "D2Z");
+               fft_filter_kernel <<< cu::grid_size, cu::block_size >>> (g::d_spec, g::d_psd, cu::atoms::d_materials, r0, nb, g::nk, g::lorentzian);
+               cufft_check(cufftExecZ2D(last ? g::bwd_last : g::bwd, g::d_spec, g::d_work), "Z2D");
+               fft_extract_kernel <<< cu::grid_size, cu::block_size >>> (g::d_work, g::d_coarse, r0, nb, g::nc, g::nv, g::seg, g::norm);
+            }
+            g::primed = true;
+            check_cuda_errors(__FILE__, __LINE__);
+         }
+
+         // this step's sample into d_noise (fft_draw), a new window when the current one is used up
+         static void fft_draw_device(){
+            namespace g = fftg;
+            if(!g::primed || (g::step - g::window_start) >= static_cast<uint64_t>(g::nv*g::M - g::M)){
+               g::window_start = g::step;
+               fft_generate_window();
+            }
+            const uint64_t local = g::step - g::window_start;
+            const int j = static_cast<int>(local/g::M);
+            const double frac = static_cast<double>(local % g::M)/g::M;
+            fft_interpolate_kernel <<< cu::grid_size, cu::block_size >>> (g::d_coarse, d_noise, cu::atoms::d_materials, n_atoms, g::nv, j, frac);
+            g::step++;
+         }
+
          void initialise(){
 
             quantum::gpu_view_t v;
@@ -301,6 +479,7 @@ namespace vcuda{
             mode = v.mode;
             ohmic = v.ohmic;
             pregen = v.pregenerated;
+            pregen_host = v.pregenerated_host;
 
             if(!pregen && n_modes > max_modes) err::fatal("Error - quantum:bath-modes exceeds the GPU limit of 256.");
             if(v.n_materials > max_materials) err::fatal("Error - the quantum module on the GPU supports at most 64 materials.");
@@ -339,11 +518,12 @@ namespace vcuda{
                seed_oscillator_kernel <<< cu::grid_size, cu::block_size >>> (cu::atoms::d_x_spin, cu::atoms::d_y_spin,
                   cu::atoms::d_z_spin, cu::atoms::d_materials, d_q, d_p, n_atoms);
             }
+            if(pregen && !pregen_host) fft_initialise(v);
             check_cuda_errors(__FILE__, __LINE__);
 
             zlog << zTs() << "Quantum module on the GPU: " << (mode == 1 ? (ohmic ? "open-system LLG + Ohmic bath (RK4)" : "open-system LLG (RK4)") : "coloured bath for llg-heun")
                  << ", spectrum " << (spectrum == 0 ? "classical" : spectrum == 1 ? "quantum" : "quantum-no-zero")
-                 << (pregen ? ", pre-generated (FFT on the host, one upload per step)"
+                 << (pregen ? (pregen_host ? ", pre-generated (FFT on the host, one upload per step)" : ", pre-generated (cuFFT on the GPU)")
                             : (spectrum == 0 ? ", white noise" : spectrum == 1 ? ", Matsubara OU modes" : ", log-spaced OU modes"))
                  << ", " << (pregen ? 0 : n_modes) << " modes, " << n_atoms << " atoms" << std::endl;
 
@@ -377,7 +557,15 @@ namespace vcuda{
          void draw(const quantum::gpu_view_t& v){
             // pre-generated: the CPU generator draws on the host, one upload per step
             // ([component][atom], as the device baths write it)
+            if(pregen && !pregen_host){
+               fft_draw_device();
+               check_cuda_errors(__FILE__, __LINE__);
+               return;
+            }
             if(pregen){
+               const double* h_x = 0;
+               const double* h_y = 0;
+               const double* h_z = 0;
                quantum::gpu_pregenerated_draw(h_x, h_y, h_z);
                const size_t N = n_atoms;
                cudaMemcpy(d_noise,         h_x, N*sizeof(double), cudaMemcpyHostToDevice);
@@ -402,15 +590,21 @@ namespace vcuda{
 
          // quantum:export-noise: copy the field of the export atom ([component][atom]
          // array on the device) to the host and append it to the export file;
-         // add_sample: plus this step's pre-generated host sample (thermostat: q + sample,
-         // as export_thermostat_sample() on the CPU)
+         // add_sample: plus this step's pre-generated sample in d_noise (thermostat:
+         // q + sample, as export_thermostat_sample() on the CPU)
          void export_field(const double* d_field, const bool add_sample = false){
             const int a = quantum::gpu_export_atom();
             if(a < 0 || a >= n_atoms) return;
             const size_t N = n_atoms;
             double v[3];
-            for(int c = 0; c < 3; c++) cudaMemcpy(&v[c], d_field + c*N + a, sizeof(double), cudaMemcpyDeviceToHost);
-            if(add_sample){ v[0] += h_x[a]; v[1] += h_y[a]; v[2] += h_z[a]; }
+            for(int c = 0; c < 3; c++){
+               cudaMemcpy(&v[c], d_field + c*N + a, sizeof(double), cudaMemcpyDeviceToHost);
+               if(add_sample){
+                  double sample = 0.0;
+                  cudaMemcpy(&sample, d_noise + c*N + a, sizeof(double), cudaMemcpyDeviceToHost);
+                  v[c] += sample;
+               }
+            }
             quantum::gpu_export_sample(v[0], v[1], v[2]);
          }
 
@@ -438,6 +632,13 @@ namespace vcuda{
          if(qg::d_q){ cudaFree(qg::d_q); cudaFree(qg::d_p); cudaFree(qg::d_yin); cudaFree(qg::d_ypred); cudaFree(qg::d_k); }
          if(qg::d_noise_e) cudaFree(qg::d_noise_e);
          if(qg::d_s_e) cudaFree(qg::d_s_e);
+         if(qg::fftg::d_coarse){
+            namespace g = qg::fftg;
+            cudaFree(g::d_tail); cudaFree(g::d_coarse); cudaFree(g::d_work); cudaFree(g::d_spec); cudaFree(g::d_psd);
+            cufftDestroy(g::fwd); cufftDestroy(g::bwd);
+            if(g::has_last){ cufftDestroy(g::fwd_last); cufftDestroy(g::bwd_last); }
+            g::d_coarse = 0;
+         }
          qg::initialised = false;
       }
 

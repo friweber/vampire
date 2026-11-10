@@ -93,13 +93,21 @@ namespace quantum{
       // filter sqrt(S(w) L(w)) on the window's frequency grid. With no window
       // size given the whole run is covered by one window, which needs an FFT
       // length of 6/4 of the run because two of six segments are discarded.
-      // The temperature is frozen at its value here.
+      // The temperature is frozen at its value here. With b.fft.device the
+      // windows are generated on the GPU (src/cuda/quantum.cu, cuFFT): only the
+      // sizes and the filter tables are prepared here, no host buffers, no FFTW.
       //---------------------------------------------------------------------------
       void fft_setup(bath_t& b, const uint64_t n_run){
 
-         #ifdef FFT
-
          fft_t& f = b.fft;
+
+         #ifndef FFT
+         if(!f.device){
+            err::fatal("Error - pre-generated quantum noise requires FFTW. Recompile with -DFFT -lfftw3 "
+                       "or use quantum:noise-generator = on-the-fly.");
+         }
+         #endif
+
          f.M = interpolation_factor;
 
          // window in coarse samples
@@ -119,9 +127,10 @@ namespace quantum{
          f.n_valid = valid_segments*f.seg;
 
          // refuse silently unbounded memory; the user can shrink the window
+         // (GPU: checked against the free device memory by the CUDA module)
          const size_t n_realisations = 3*static_cast<size_t>(b.n_sites);
          const double bytes = static_cast<double>(n_realisations)*(f.n_valid + 2*f.seg)*sizeof(double);
-         if(bytes > 8.0*1024.0*1024.0*1024.0){
+         if(!f.device && bytes > 8.0*1024.0*1024.0*1024.0){
             std::ostringstream message;
             message << "Error - pre-generated quantum noise for " << b.n_sites << " atoms and "
                     << n_run << " steps needs " << bytes/(1024.0*1024.0*1024.0)
@@ -130,26 +139,37 @@ namespace quantum{
             err::fatal(message.str());
          }
 
-         f.tail.assign(n_realisations*2*f.seg, 0.0);
-         f.coarse.assign(n_realisations*f.n_valid, 0.0);
+         #ifdef FFT
+         if(!f.device){
+            f.tail.assign(n_realisations*2*f.seg, 0.0);
+            f.coarse.assign(n_realisations*f.n_valid, 0.0);
 
-         f.in = static_cast<double*>(fftw_malloc(sizeof(double)*f.n_coarse));
-         f.out = static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex)*(f.n_coarse/2 + 1)));
-         f.result = static_cast<double*>(fftw_malloc(sizeof(double)*f.n_coarse));
-         f.forward = fftw_plan_dft_r2c_1d(f.n_coarse, f.in, f.out, FFTW_MEASURE);
-         f.backward = fftw_plan_dft_c2r_1d(f.n_coarse, f.out, f.result, FFTW_MEASURE);
+            f.in = static_cast<double*>(fftw_malloc(sizeof(double)*f.n_coarse));
+            f.out = static_cast<fftw_complex*>(fftw_malloc(sizeof(fftw_complex)*(f.n_coarse/2 + 1)));
+            f.result = static_cast<double*>(fftw_malloc(sizeof(double)*f.n_coarse));
+            f.forward = fftw_plan_dft_r2c_1d(f.n_coarse, f.in, f.out, FFTW_MEASURE);
+            f.backward = fftw_plan_dft_c2r_1d(f.n_coarse, f.out, f.result, FFTW_MEASURE);
+         }
+         #endif
 
          // filter tables: one per material when the Lorentzian is included
          const double T_scaled = sim::temperature*b.T_scale;
          const double dt_coarse = f.M*b.dt;
          const int n_tables = b.lorentzian ? static_cast<int>(material_A.size()) : 1;
-         f.sqrt_psd.assign(n_tables, std::vector<double>(f.n_coarse/2 + 1, 0.0));
+         const int n_k = f.n_coarse/2 + 1;
+         f.sqrt_psd.assign(n_tables, std::vector<double>(n_k, 0.0));
          for(int m = 0; m < n_tables; m++){
-            for(int k = 0; k <= f.n_coarse/2; k++){
+            for(int k = 0; k < n_k; k++){
                const double w = 2.0*M_PI*k/(f.n_coarse*dt_coarse);
                double psd = spectral_density(b.spectrum, w, T_scaled);
                if(b.lorentzian) psd *= lorentzian_filter(m, w);
                f.sqrt_psd[m][k] = std::sqrt(psd);
+            }
+         }
+         if(f.device){
+            f.sqrt_psd_flat.resize(static_cast<size_t>(n_tables)*n_k);
+            for(int m = 0; m < n_tables; m++){
+               for(int k = 0; k < n_k; k++) f.sqrt_psd_flat[static_cast<size_t>(m)*n_k + k] = f.sqrt_psd[m][k];
             }
          }
 
@@ -164,13 +184,8 @@ namespace quantum{
          if(vmpi::my_rank == 0){
             zlog << zTs() << "Quantum pre-generated noise: window of " << f.n_valid << " coarse samples ("
                  << f.n_valid*f.M << " steps, FFT length " << f.n_coarse << "), buffer "
-                 << bytes/(1024.0*1024.0) << " MiB" << std::endl;
+                 << bytes/(1024.0*1024.0) << " MiB" << (f.device ? " on the GPU (cuFFT)" : "") << std::endl;
          }
-
-         #else
-         err::fatal("Error - pre-generated quantum noise requires FFTW. Recompile with -DFFT -lfftw3 "
-                    "or use quantum:noise-generator = on-the-fly.");
-         #endif
 
          return;
 

@@ -52,6 +52,12 @@ namespace quantum{
       v.mode = (mode == thermostat) ? 1 : (mode == bath) ? 2 : 0;
       v.spectrum = (b.spectrum == classical) ? 0 : (b.spectrum == quantum_zero) ? 1 : 2;
       v.pregenerated = (b.generator == pre_generated) ? 1 : 0;
+      v.pregenerated_host = (v.pregenerated && !b.fft.device) ? 1 : 0;
+      v.fft_seg = b.fft.seg;
+      v.fft_M = b.fft.M;
+      v.fft_n_tables = b.lorentzian ? static_cast<int>(material_A.size()) : 1;
+      v.fft_norm = b.fft.norm;
+      v.fft_sqrt_psd = b.fft.sqrt_psd_flat.data();
       v.n_modes = b.n_modes;
       v.n_materials = static_cast<int>(mp::material.size());
       v.dt = mp::dt;

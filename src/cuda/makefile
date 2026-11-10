@@ -8,7 +8,7 @@ NVCC=nvcc -DCOMP='"NVCC $(NVCC_VERSION)"'
 # Correct incompatibility with -Wsign-compare flag and nvcc
 GCC_LDFLAGS := $(filter-out -Wsign-compare,$(GCC_LDFLAGS))
 
-CUDALIBS=-L/usr/local/cuda/lib64/ -lcudart -lcusparse -lcurand
+CUDALIBS=-L/usr/local/cuda/lib64/ -lcudart -lcusparse -lcurand -lcufft
 
 # List module object filenames
 CUDA_OBJECTS= \
@@ -66,7 +66,7 @@ $(CUDA_OBJECTS): obj/%.o: src/%.cu
 ifeq ($(shell uname -s), Darwin)
 cuda-build: GCC_CFLAGS=$(LLVM_CFLAGS)
 cuda-build: GCC_LDFLAGS=$(LLVM_LDFLAGS)
-cuda-build: CUDALIBS=-lcudart -lcusparse -lcurand
+cuda-build: CUDALIBS=-lcudart -lcusparse -lcurand -lcufft
 endif
 cuda-build: GCC_CFLAGS += -DCUDA
 cuda-build: $(OBJECTS) $(CUDA_OBJECTS)

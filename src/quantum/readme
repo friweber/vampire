@@ -40,11 +40,15 @@
 //   step. Noise export copies the field of the export atom to the host once
 //   per step (at the same point as the CPU steppers). Pre-generated noise
 //   (classical thermostat, quantum, quantum-no-zero; llg-heun and llg-quantum)
-//   is drawn on the host by the CPU generator and uploaded once per step
-//   (gpu_pregenerated_draw), so a GPU run draws the same noise as a CPU run
-//   with the same seed; the FFT windows stay in host memory. Spin-lattice
-//   dynamics and MPI builds stay on the CPU and are refused with
-//   gpu:acceleration.
+//   runs on the GPU as well. By default the overlap-save windows are
+//   generated on the device with cuFFT (fft_setup prepares only the sizes and
+//   the filter tables; white noise from the Philox streams, batched D2Z,
+//   filter, Z2D, per-step interpolation kernel); the window lives in device
+//   memory, the host needs neither FFTW nor window buffers. With
+//   quantum:pre-generated-device = host the CPU generator draws the sample
+//   and it is uploaded once per step (gpu_pregenerated_draw): the same noise
+//   as a CPU run with the same seed. Spin-lattice dynamics and MPI builds stay
+//   on the CPU and are refused with gpu:acceleration.
 //
 //   Spectra
 //   -------
@@ -133,6 +137,7 @@
 //   quantum:noise-generator         on-the-fly | pre-generated
 //   quantum:noise-window-size       fine steps per window (0 = whole run)
 //   quantum:noise-interpolation-factor  fine steps per coarse sample
+//   quantum:pre-generated-device    gpu | host (gpu:acceleration only)
 //   quantum:bath-modes              modes per site (default 30)
 //   quantum:bath-scan-resolution    grid points per axis of the log-bath fit
 //   quantum:bath-scan-omega-points  frequency points of the log-bath fit

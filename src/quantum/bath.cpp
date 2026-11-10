@@ -56,7 +56,9 @@ namespace quantum{
          b.z.assign(n_sites, 0.0);
 
          // pre-generated noise: shape the window filter, allocate the buffers
+         // (on the GPU unless quantum:pre-generated-device = host)
          if(generator == pre_generated){
+            b.fft.device = gpu::acceleration && !pre_generated_on_host;
             fft_setup(b, n_run);
             return;
          }
