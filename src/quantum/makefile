@@ -11,6 +11,7 @@ bath_ou.o \
 data.o \
 export.o \
 fdt_monitor.o \
+adaptive.o \
 initialize.o \
 interface.o \
 llg.o \

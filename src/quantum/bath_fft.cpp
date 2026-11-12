@@ -11,6 +11,7 @@
 //
 
 // C++ standard library headers
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <sstream>
@@ -183,6 +184,8 @@ namespace quantum{
                f.sqrt_psd[m][k] = std::sqrt(psd);
             }
          }
+         f.sqrt_psd0 = f.sqrt_psd;
+         f.dt_bath = b.dt;
          if(f.device){
             f.sqrt_psd_flat.resize(static_cast<size_t>(n_tables)*n_k);
             for(int m = 0; m < n_tables; m++){
@@ -273,6 +276,7 @@ namespace quantum{
 
          if(!f.primed || (f.step - f.window_start) >= static_cast<uint64_t>(f.n_valid*f.M - f.M)){
             f.window_start = f.step;
+            if(f.primed && &b == &spin_bath) adaptive_before_window(b);   // adaptive bath (no-op unless enabled)
             fft_generate_window(b);
          }
 
@@ -294,6 +298,37 @@ namespace quantum{
 
          return;
 
+      }
+
+      //---------------------------------------------------------------------------
+      // Adaptive bath: filter tables = unadapted tables x sqrt(g(w)), g given per
+      // band (centres band_w_SI in rad/s), linear in between, constant outside
+      //---------------------------------------------------------------------------
+      void fft_apply_gain(bath_t& b, const std::vector<double>& band_w_SI, const std::vector<double>& gain){
+         fft_t& f = b.fft;
+         if(f.sqrt_psd0.empty() || band_w_SI.empty()) return;
+         const int n_k = f.n_coarse/2 + 1;
+         const double dt_coarse = f.M*f.dt_bath;
+         const double to_SI = f.dt_bath/mp::dt_SI;     // w_SI = w_bath dt_bath/dt_SI
+         std::vector<double> gk(n_k);
+         for(int k = 0; k < n_k; k++){
+            const double w = 2.0*M_PI*k/(f.n_coarse*dt_coarse)*to_SI;
+            double g;
+            if(w <= band_w_SI.front()) g = gain.front();
+            else if(w >= band_w_SI.back()) g = gain.back();
+            else{
+               const size_t j = std::upper_bound(band_w_SI.begin(), band_w_SI.end(), w) - band_w_SI.begin();
+               g = gain[j-1] + (gain[j] - gain[j-1])*(w - band_w_SI[j-1])/(band_w_SI[j] - band_w_SI[j-1]);
+            }
+            gk[k] = std::sqrt(std::max(0.0, g));
+         }
+         for(size_t m = 0; m < f.sqrt_psd.size(); m++)
+            for(int k = 0; k < n_k; k++) f.sqrt_psd[m][k] = f.sqrt_psd0[m][k]*gk[k];
+         if(f.device){
+            for(size_t m = 0; m < f.sqrt_psd.size(); m++)
+               for(int k = 0; k < n_k; k++) f.sqrt_psd_flat[m*n_k + k] = f.sqrt_psd[m][k];
+         }
+         f.table_version++;
       }
 
       //---------------------------------------------------------------------------

@@ -138,4 +138,14 @@ namespace quantum{
 
    }
 
+   //---------------------------------------------------------------------------
+   // Adaptive bath before a new window generated on the GPU: update the gain
+   // from the monitor series; returns the new flattened filter table or 0
+   //---------------------------------------------------------------------------
+   const double* gpu_adaptive_window(){
+      internal::bath_t& b = internal::spin_bath;
+      if(!internal::adaptive_bath) return 0;
+      return internal::adaptive_before_window(b) ? b.fft.sqrt_psd_flat.data() : 0;
+   }
+
 } // end of quantum namespace

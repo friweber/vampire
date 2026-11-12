@@ -127,6 +127,7 @@ namespace quantum{
    bool gpu_thermostat();            // open-system LLG on the GPU
    void gpu_view(gpu_view_t& view);  // refresh the coefficients for sim::temperature and fill the view
    void gpu_pregenerated_draw(const double*& x, const double*& y, const double*& z); // this step's pre-generated sample (host)
+   const double* gpu_adaptive_window(); // adaptive bath before a new GPU window: new filter table, or 0 if unchanged
    int gpu_export_atom();            // atom of quantum:export-noise, -1 when the export is off
    void gpu_export_sample(const double x, const double y, const double z); // append one exported sample
 

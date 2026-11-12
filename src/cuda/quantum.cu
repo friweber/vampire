@@ -459,6 +459,10 @@ namespace vcuda{
             namespace g = fftg;
             if(!g::primed || (g::step - g::window_start) >= static_cast<uint64_t>(g::nv*g::M - g::M)){
                g::window_start = g::step;
+               if(g::primed){   // adaptive bath: new filter table from the monitor series
+                  const double* table = quantum::gpu_adaptive_window();
+                  if(table) cudaMemcpy(g::d_psd, table, static_cast<size_t>(g::n_tables)*g::nk*sizeof(double), cudaMemcpyHostToDevice);
+               }
                fft_generate_window();
             }
             const uint64_t local = g::step - g::window_start;

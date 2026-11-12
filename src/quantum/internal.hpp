@@ -111,6 +111,9 @@ namespace quantum{
             double norm;           // output scale, 1/(n_coarse*sqrt(M*dt))
             std::vector< std::vector<double> > sqrt_psd; // [material][n_coarse/2+1]
             std::vector<double> sqrt_psd_flat;           // the same, flattened [table*(n_coarse/2+1) + k] (GPU)
+            std::vector< std::vector<double> > sqrt_psd0; // unadapted filter (adaptive bath: sqrt_psd = sqrt_psd0 sqrt(g))
+            double dt_bath;        // bath time step (frequency unit of the tables: w_bath dt_bath = w_SI dt_SI)
+            int table_version;     // incremented whenever the tables change (GPU re-upload)
             std::vector<double> tail;   // 2*seg white samples per realisation, carried over
             std::vector<double> coarse; // shaped coarse samples of the current window
             #ifdef FFT
@@ -123,7 +126,7 @@ namespace quantum{
 
             // constructor
             fft_t () : M(1), n_coarse(0), seg(0), n_valid(0), device(false), primed(false),
-                       step(0), window_start(0), norm(0.0)
+                       step(0), window_start(0), norm(0.0), dt_bath(0.0), table_version(0)
             {
                #ifdef FFT
                forward = 0;
@@ -208,6 +211,13 @@ namespace quantum{
       extern double noise_cutoff_energy_meV; // high-frequency cut-off of the pre-generated noise (meV, 0 = none)
       extern double noise_cutoff_width;      // relative width of its Fermi edge
       extern bool fdt_monitor;            // record the FDT monitor (fdt_monitor.cpp)
+      extern bool adaptive_bath;          // adaptive noise gain per frequency band (adaptive.cpp)
+      extern double adaptive_eta;         // exponent of the update g <- g rho^-eta
+      extern int adaptive_bands;          // number of frequency bands of the gain
+      extern double adaptive_max_energy_meV; // upper edge of the bands (default 1.2 x cut-off)
+      extern int64_t adaptive_freeze_step;// no updates from this step on (-1: never frozen)
+      extern std::string adaptive_gain_in;  // gain table to start from ("" = g = 1)
+      extern std::string adaptive_gain_out; // gain table written at the end
       extern std::string fdt_filename;    // its binary output
       extern int fdt_n_probe;             // number of probe atoms
       extern int fdt_sample_steps;        // steps per block
@@ -279,6 +289,20 @@ namespace quantum{
       void fft_generate_window(bath_t& b);
       void fft_draw(bath_t& b, const std::vector<double>& amplitude);
       void fft_release(bath_t& b);
+      void fft_apply_gain(bath_t& b, const std::vector<double>& band_w_SI, const std::vector<double>& gain);
+
+      // adaptive.cpp / fdt_monitor.cpp
+      bool adaptive_before_window(bath_t& b);   // update the gain from the monitor series; true if the tables changed
+      void adaptive_setup(bath_t& b);           // gain from file (if any) after fft_setup
+      void adaptive_finalize();
+      namespace fdt{
+         extern std::vector<int> probe;
+         extern std::vector<double> probe_mu, probe_alpha_over_gamma;
+         extern std::vector<double> series_b, series_v;   // per block: [np*3] block means, kept for the adaptation
+         extern uint64_t series_blocks;
+         extern double block_dt_SI;
+         void ensure_initialised();
+      }
 
       // export.cpp
       void export_open(const char* source);

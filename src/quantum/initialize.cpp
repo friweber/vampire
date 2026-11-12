@@ -434,6 +434,7 @@ namespace quantum{
    void cleanup(){
 
       fdt_finalize();   // close the FDT monitor output
+      internal::adaptive_finalize();
       internal::fft_release(internal::spin_bath);
       internal::fft_release(internal::lattice_bath);
       return;

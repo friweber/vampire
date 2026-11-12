@@ -71,6 +71,12 @@ namespace quantum{
          bool initialised = false;
          bool active = false;                          // false: disabled after a setup problem
          std::vector<int> probe;                       // probe atom indices
+         std::vector<double> probe_mu;                 // mu_s (J/T) of the probe atoms
+         std::vector<double> probe_alpha_over_gamma;   // alpha/gamma (s T) of the probe atoms
+         std::vector<double> series_b, series_v;       // adaptive bath: block means since the last update
+         uint64_t series_blocks = 0;
+         double block_dt_SI = 0.0;
+         uint64_t blk_t0 = 0;                          // first step of the current block
          std::vector<double> s_old;                    // spin at the start of the step [3*np]
          std::vector<double> s_blk;                    // spin at the start of the block [3*np]
          std::vector<double> acc;                      // accumulators [8*np]: b(3), -, -, -, p_bs, p_ss
@@ -93,6 +99,12 @@ namespace quantum{
             std::shuffle(all.begin(), all.end(), rng);
             probe.assign(all.begin(), all.begin() + np);
             std::sort(probe.begin(), probe.end());
+            probe_mu.resize(np); probe_alpha_over_gamma.resize(np);
+            for(int p = 0; p < np; p++){
+               const int m = atoms::type_array[probe[p]];
+               probe_mu[p] = mp::material[m].mu_s_SI;
+               probe_alpha_over_gamma[p] = mp::material[m].alpha/(mp::material[m].gamma_rel*constants::gamma_SI);
+            }
          }
 
          void write_header(){
@@ -131,16 +143,21 @@ namespace quantum{
             const int np = probe.size();
             s_old.assign(3*np, 0.0); s_blk.assign(3*np, 0.0); acc.assign(8*np, 0.0);
             b_now.assign(3*np, 0.0); s_now.assign(3*np, 0.0);
-            out.open(fdt_filename.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-            if(!out.is_open()){
-               zlog << zTs() << "Warning: cannot open " << fdt_filename << "; FDT monitor disabled." << std::endl;
-               return;
+            block_dt_SI = fdt_sample_steps*mp::dt_SI;
+            if(fdt_monitor){
+               out.open(fdt_filename.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+               if(!out.is_open()){
+                  zlog << zTs() << "Warning: cannot open " << fdt_filename << "; FDT monitor disabled." << std::endl;
+                  return;
+               }
+               write_header();
+               zlog << zTs() << "FDT monitor: " << np << " probe atoms, " << fdt_sample_steps << " steps per block, from step "
+                    << fdt_start_step << ", output " << fdt_filename << std::endl;
             }
-            write_header();
             active = true;
-            zlog << zTs() << "FDT monitor: " << np << " probe atoms, " << fdt_sample_steps << " steps per block, from step "
-                 << fdt_start_step << ", output " << fdt_filename << std::endl;
          }
+
+         void ensure_initialised(){ if(!initialised) initialise(); }
 
          // spins (and on the GPU the bath field) of the probe atoms
          void read_spins(std::vector<double>& s){
@@ -180,11 +197,12 @@ namespace quantum{
    //---------------------------------------------------------------------------
    void fdt_begin_step(){
       using namespace internal;
-      if(!fdt_monitor) return;
+      if(!fdt_monitor && !adaptive_bath) return;
       if(!fdt::initialised) fdt::initialise();
-      if(!fdt::active || static_cast<int64_t>(sim::time) < fdt_start_step) return;
+      // adaptive bath: record from the first step (it adapts during equilibration); file only from fdt_start_step
+      if(!fdt::active || (!adaptive_bath && static_cast<int64_t>(sim::time) < fdt_start_step)) return;
       fdt::read_spins(fdt::s_old);   // GPU: b_now is overwritten here and refilled after the step
-      if(fdt::n_in_block == 0) fdt::s_blk = fdt::s_old;
+      if(fdt::n_in_block == 0){ fdt::s_blk = fdt::s_old; fdt::blk_t0 = sim::time; }
    }
 
    //---------------------------------------------------------------------------
@@ -192,7 +210,8 @@ namespace quantum{
    //---------------------------------------------------------------------------
    void fdt_end_step(){
       using namespace internal;
-      if(!fdt_monitor || !fdt::active || static_cast<int64_t>(sim::time) < fdt_start_step) return;
+      if((!fdt_monitor && !adaptive_bath) || !fdt::active) return;
+      if(!adaptive_bath && static_cast<int64_t>(sim::time) < fdt_start_step) return;
       fdt::read_spins(fdt::s_now);   // GPU: also fills b_now with this step's field
       fdt::read_field();
       const int np = fdt::probe.size();
@@ -222,11 +241,21 @@ namespace quantum{
          }
          r[6] *= inv; r[7] *= inv;
       }
-      fdt::out.write(reinterpret_cast<const char*>(fdt::acc.data()), fdt::acc.size()*sizeof(double));
+      if(fdt_monitor && fdt::out.is_open() && static_cast<int64_t>(fdt::blk_t0) >= fdt_start_step){
+         fdt::out.write(reinterpret_cast<const char*>(fdt::acc.data()), fdt::acc.size()*sizeof(double));
+         fdt::n_blocks++;
+         if(fdt::n_blocks % 1000 == 0) fdt::out.flush();
+      }
+      if(adaptive_bath){
+         for(int p = 0; p < np; p++)
+            for(int c = 0; c < 3; c++){
+               fdt::series_b.push_back(fdt::acc[8*p+c]);
+               fdt::series_v.push_back(fdt::acc[8*p+3+c]);
+            }
+         fdt::series_blocks++;
+      }
       std::fill(fdt::acc.begin(), fdt::acc.end(), 0.0);
       fdt::n_in_block = 0;
-      fdt::n_blocks++;
-      if(fdt::n_blocks % 1000 == 0) fdt::out.flush();
    }
 
    void fdt_finalize(){

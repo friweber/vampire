@@ -60,6 +60,7 @@ namespace quantum{
          if(generator == pre_generated){
             b.fft.device = gpu::acceleration && !pre_generated_on_host;
             fft_setup(b, n_run);
+            if(&b == &spin_bath) adaptive_setup(b);   // adaptive bath (no-op unless enabled)
             return;
          }
 

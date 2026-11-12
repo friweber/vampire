@@ -181,6 +181,54 @@ namespace quantum{
          return true;
       }
       //--------------------------------------------------------------------
+      test="adaptive-bath";
+      if(word==test){
+         internal::adaptive_bath = internal::is_true(value) || value.empty();
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="adaptive-gain";
+      if(word==test){
+         double e = vin::str_to_double(value);
+         vin::check_for_valid_value(e, word, line, prefix, unit, "none", 0.0, 2.0, "input", "in [0, 2]");
+         internal::adaptive_eta = e;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="adaptive-bands";
+      if(word==test){
+         int n = vin::str_to_uint64(value);
+         vin::check_for_valid_int(n, word, line, prefix, 2, 1000, "input", "in [2, 1000]");
+         internal::adaptive_bands = n;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="adaptive-max-energy";
+      if(word==test){
+         double e = vin::str_to_double(value);
+         vin::check_for_valid_value(e, word, line, prefix, unit, "none", 0.0, 1.0e5, "input", "in [0, 1e5] meV");
+         internal::adaptive_max_energy_meV = e;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="adaptive-freeze-step";
+      if(word==test){
+         internal::adaptive_freeze_step = vin::str_to_uint64(value);
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="adaptive-gain-file-in";
+      if(word==test){
+         internal::adaptive_gain_in = value;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="adaptive-gain-file-out";
+      if(word==test){
+         internal::adaptive_gain_out = value;
+         return true;
+      }
+      //--------------------------------------------------------------------
       test="fdt-monitor";
       if(word==test){
          internal::fdt_monitor = true;
