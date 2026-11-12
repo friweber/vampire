@@ -59,6 +59,7 @@ namespace quantum{
       double adaptive_eta = 0.1;
       int adaptive_bands = 32;
       double adaptive_max_energy_meV = 0.0;
+      double adaptive_band_width_meV = 0.0;
       int64_t adaptive_freeze_step = -1;
       std::string adaptive_gain_in = "";
       std::string adaptive_gain_out = "adaptive_gain_final.dat";
@@ -80,6 +81,8 @@ namespace quantum{
             else if(noise_cutoff_energy_meV > 0.0) w_top = std::min(w_nyq, 1.2*noise_cutoff_energy_meV*meV/hbar);
             else err::fatal("Error - quantum:adaptive-bath needs quantum:adaptive-max-energy (meV) or quantum:noise-cutoff-energy "
                             "to place its frequency bands.");
+            if(adaptive_band_width_meV > 0.0)   // fixed band width: number of bands follows the band edge
+               adaptive_bands = std::max(2, static_cast<int>(std::ceil(w_top/(adaptive_band_width_meV*meV/hbar))));
             const int n = adaptive_bands;
             w_centre.resize(n);
             for(int i = 0; i < n; i++) w_centre[i] = (i + 0.5)*w_top/n;

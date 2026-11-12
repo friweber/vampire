@@ -215,6 +215,7 @@ namespace quantum{
       extern double adaptive_eta;         // exponent of the update g <- g rho^-eta
       extern int adaptive_bands;          // number of frequency bands of the gain
       extern double adaptive_max_energy_meV; // upper edge of the bands (default 1.2 x cut-off)
+      extern double adaptive_band_width_meV; // fixed band width (meV); overrides adaptive-bands
       extern int64_t adaptive_freeze_step;// no updates from this step on (-1: never frozen)
       extern std::string adaptive_gain_in;  // gain table to start from ("" = g = 1)
       extern std::string adaptive_gain_out; // gain table written at the end

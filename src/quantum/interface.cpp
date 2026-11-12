@@ -211,6 +211,14 @@ namespace quantum{
          return true;
       }
       //--------------------------------------------------------------------
+      test="adaptive-band-width";
+      if(word==test){
+         double e = vin::str_to_double(value);
+         vin::check_for_valid_value(e, word, line, prefix, unit, "none", 0.0, 1.0e4, "input", "in [0, 1e4] meV");
+         internal::adaptive_band_width_meV = e;
+         return true;
+      }
+      //--------------------------------------------------------------------
       test="adaptive-freeze-step";
       if(word==test){
          internal::adaptive_freeze_step = vin::str_to_uint64(value);
