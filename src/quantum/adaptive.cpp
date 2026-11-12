@@ -165,7 +165,11 @@ namespace quantum{
             return false;
          }
          const int nblk = fdt::series_blocks;
-         if(nblk < 32) return false;   // keep collecting
+         // keep collecting (over several windows if needed) until every band holds >= 3 spectral bins:
+         // 2 pi/(nblk dt_block) <= band width/3
+         const double band_width = adapt::w_top/adaptive_bands;
+         const int nblk_min = std::max(32, static_cast<int>(std::ceil(3.0*2.0*M_PI/(fdt::block_dt_SI*band_width))));
+         if(nblk < nblk_min) return false;
          const int np = fdt::probe.size();
          const int nf = nblk/2;
          const double dw = 2.0*M_PI/(nblk*fdt::block_dt_SI);
