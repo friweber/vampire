@@ -41,6 +41,8 @@ namespace quantum{
       int interpolation_factor = 1;           // fine steps per coarse sample
       bool pre_generated_on_host = false;     // gpu:acceleration: false = windows on the GPU (cuFFT), true = host
 
+      double noise_cutoff_energy_meV = 0.0;   // no cut-off by default (identical numbers for old inputs)
+      double noise_cutoff_width = 0.1;
       bool export_noise = false;              // export the injected noise of one atom
       std::string export_filename = "quantum-noise.dat"; // export file name
       int export_atom = 0;                    // atom to export

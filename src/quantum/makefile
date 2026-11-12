@@ -10,6 +10,7 @@ bath_log.o \
 bath_ou.o \
 data.o \
 export.o \
+fdt_monitor.o \
 initialize.o \
 interface.o \
 llg.o \

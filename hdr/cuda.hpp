@@ -1,5 +1,6 @@
 #ifndef CUDA_H_
 #define CUDA_H_
+#include <vector>
 //------------------------------------------------------------------------------
 //
 //   This file is part of the VAMPIRE open source package under the
@@ -31,6 +32,7 @@ namespace vcuda{
    extern void transfer_dipole_cells_fields_from_gpu_to_cpu();
    extern void update_dipolar_fields();
    extern void mc_step();
+   extern void fdt_gather(const std::vector<int>& probe, std::vector<double>& s, std::vector<double>& h); // FDT monitor
 
    namespace config{
       extern void synchronise();

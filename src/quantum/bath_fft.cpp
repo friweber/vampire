@@ -17,6 +17,8 @@
 
 // Vampire headers
 #include "atoms.hpp"
+#include "constants.hpp"
+#include "material.hpp"
 #include "errors.hpp"
 #include "quantum.hpp"
 #include "random.hpp"
@@ -54,6 +56,20 @@ namespace quantum{
 
          return (x > 350.0) ? 0.0 : 2.0*w/std::expm1(2.0*x);
 
+      }
+
+      //---------------------------------------------------------------------------
+      // Optional high-frequency cut-off of the noise spectrum (quantum:noise-
+      // cutoff-energy), Fermi edge 1/(1 + exp((w - W)/(d W))). Without it the
+      // zero-point spectrum grows up to the Nyquist frequency of the noise grid
+      // and the result depends on dt. w is in the bath's unit (w*dt_bath =
+      // w_SI*dt_SI).
+      //---------------------------------------------------------------------------
+      static double cutoff_filter(const double w, const double dt_bath){
+         if(noise_cutoff_energy_meV <= 0.0) return 1.0;
+         const double W = noise_cutoff_energy_meV*1.0e-3*constants::eV/constants::hbar*mp::dt_SI/dt_bath;
+         const double x = (w - W)/(noise_cutoff_width*W);
+         return (x > 700.0) ? 0.0 : 1.0/(1.0 + std::exp(x));
       }
 
       //---------------------------------------------------------------------------
@@ -163,6 +179,7 @@ namespace quantum{
                const double w = 2.0*M_PI*k/(f.n_coarse*dt_coarse);
                double psd = spectral_density(b.spectrum, w, T_scaled);
                if(b.lorentzian) psd *= lorentzian_filter(m, w);
+               psd *= cutoff_filter(w, b.dt);
                f.sqrt_psd[m][k] = std::sqrt(psd);
             }
          }

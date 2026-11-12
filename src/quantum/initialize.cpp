@@ -403,6 +403,14 @@ namespace quantum{
          }
       }
 
+      if(noise_cutoff_energy_meV > 0.0 && (mode == inactive || noise_generator != pre_generated)){
+         err::fatal("Error - quantum:noise-cutoff-energy acts on the pre-generated (FFT) noise only: set "
+                    "quantum:noise-generator = pre-generated and a non-classical quantum:noise-type.");
+      }
+      if(noise_cutoff_energy_meV > 0.0){
+         zlog << zTs() << "Quantum noise cut-off: " << noise_cutoff_energy_meV << " meV, relative edge width "
+              << noise_cutoff_width << std::endl;
+      }
       if(export_noise) export_open((mode == thermostat) ? ((noise_generator == pre_generated) ? "bath field q + pre-generated sample"
                                                                                             : "bath field (auxiliary oscillator q)")
                                                        : "spin bath sample");
@@ -424,6 +432,8 @@ namespace quantum{
    // Function to release the FFTW resources of both baths
    //---------------------------------------------------------------------------
    void cleanup(){
+
+      fdt_finalize();   // close the FDT monitor output
       internal::fft_release(internal::spin_bath);
       internal::fft_release(internal::lattice_bath);
       return;

@@ -9,6 +9,7 @@
 //
 //------------------------------------------------------------------------------
 #include <string>
+#include <vector>
 
 namespace gpu{
 
@@ -36,6 +37,7 @@ namespace gpu{
    extern void transfer_dipole_cells_fields_from_gpu_to_cpu();
    extern void update_dipolar_fields();
    extern void mc_step();
+   extern void fdt_gather(const std::vector<int>& probe, std::vector<double>& s, std::vector<double>& h); // FDT monitor
 
    //-----------------------------------------------------------------------------
    // Functions for GPU configuration output

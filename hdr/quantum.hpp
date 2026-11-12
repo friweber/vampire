@@ -52,6 +52,13 @@ namespace quantum{
    double field(const int atom, const int component);
    void thermal_fields(const int start_index, const int end_index);
 
+   //---------------------------------------------------------------------------
+   // FDT monitor (quantum:fdt-monitor): call around every llg-heun step
+   //---------------------------------------------------------------------------
+   void fdt_begin_step();
+   void fdt_end_step();
+   void fdt_finalize();
+
    //-----------------------------------------------------------------------------
    // Lattice (phonon) bath for the spin-lattice module. The lattice module
    // hands over its per-material parameters before quantum::initialize()

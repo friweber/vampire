@@ -205,6 +205,13 @@ namespace quantum{
       extern bool export_noise;           // write the injected noise of one atom
       extern std::string export_filename; // file for the noise export
       extern int export_atom;             // atom whose noise is exported
+      extern double noise_cutoff_energy_meV; // high-frequency cut-off of the pre-generated noise (meV, 0 = none)
+      extern double noise_cutoff_width;      // relative width of its Fermi edge
+      extern bool fdt_monitor;            // record the FDT monitor (fdt_monitor.cpp)
+      extern std::string fdt_filename;    // its binary output
+      extern int fdt_n_probe;             // number of probe atoms
+      extern int fdt_sample_steps;        // steps per block
+      extern int64_t fdt_start_step;      // first recorded step (-1: equilibration time)
 
       extern bath_t spin_bath;            // spin bath (thermostat, llg-heun, spin-lattice)
       extern bath_t lattice_bath;         // lattice bath (spin-lattice only)

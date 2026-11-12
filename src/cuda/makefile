@@ -17,6 +17,7 @@ CUDA_OBJECTS= \
 	obj/cuda/dipole.o \
 	obj/cuda/exchange_fields.o \
 	obj/cuda/external_fields.o \
+	obj/cuda/fdt_monitor.o \
 	obj/cuda/finalize.o \
 	obj/cuda/hamr_fields.o \
 	obj/cuda/initialize.o \

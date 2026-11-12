@@ -165,6 +165,51 @@ namespace quantum{
          return true;
       }
       //--------------------------------------------------------------------
+      test="noise-cutoff-energy";
+      if(word==test){
+         double e = vin::str_to_double(value);
+         vin::check_for_valid_value(e, word, line, prefix, unit, "none", 0.0, 1.0e5, "input", "in [0, 1e5] meV");
+         internal::noise_cutoff_energy_meV = e;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="noise-cutoff-width";
+      if(word==test){
+         double d = vin::str_to_double(value);
+         vin::check_for_valid_value(d, word, line, prefix, unit, "none", 0.001, 1.0, "input", "in [0.001, 1]");
+         internal::noise_cutoff_width = d;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="fdt-monitor";
+      if(word==test){
+         internal::fdt_monitor = true;
+         if(!internal::is_true(value)) internal::fdt_filename = value;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="fdt-probe-atoms";
+      if(word==test){
+         int n = vin::str_to_uint64(value);
+         vin::check_for_valid_int(n, word, line, prefix, 1, 100000, "input", "in [1, 100000]");
+         internal::fdt_n_probe = n;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="fdt-sample-steps";
+      if(word==test){
+         int n = vin::str_to_uint64(value);
+         vin::check_for_valid_int(n, word, line, prefix, 1, 1000000, "input", "in [1, 1000000]");
+         internal::fdt_sample_steps = n;
+         return true;
+      }
+      //--------------------------------------------------------------------
+      test="fdt-start-step";
+      if(word==test){
+         internal::fdt_start_step = vin::str_to_uint64(value);
+         return true;
+      }
+      //--------------------------------------------------------------------
       // keyword not found
       //--------------------------------------------------------------------
       return false;

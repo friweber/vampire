@@ -11,6 +11,7 @@ initialize.o \
 interface.o \
 llg_heun.o \
 quantum_llg.o \
+fdt_monitor.o \
 monte_carlo.o \
 statistics.o \
 transfer.o \
