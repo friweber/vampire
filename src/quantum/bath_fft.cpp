@@ -179,8 +179,18 @@ namespace quantum{
             for(int k = 0; k < n_k; k++){
                const double w = 2.0*M_PI*k/(f.n_coarse*dt_coarse);
                double psd = spectral_density(b.spectrum, w, T_scaled);
+               // high-frequency cut-off (quantum:noise-cutoff-energy / -mode), F = Fermi edge:
+               //   full            S F                      (whole spectrum; default, the original behaviour)
+               //   zero-point      (S - w) + w F            (only the zero-point term; quantum spectrum)
+               //   classical-floor S F + 2T (1 - F)         (above the cut the bath reverts to the classical white level,
+               //                                             so the high-temperature limit stays the classical one)
+               {
+                  const double F = cutoff_filter(w, b.dt);
+                  if(noise_cutoff_mode == 1 && b.spectrum == quantum_zero) psd = (psd - w) + w*F;
+                  else if(noise_cutoff_mode == 2) psd = psd*F + 2.0*T_scaled*(1.0 - F);
+                  else psd *= F;
+               }
                if(b.lorentzian) psd *= lorentzian_filter(m, w);
-               psd *= cutoff_filter(w, b.dt);
                f.sqrt_psd[m][k] = std::sqrt(psd);
             }
          }

@@ -409,7 +409,7 @@ namespace quantum{
       }
       if(noise_cutoff_energy_meV > 0.0){
          zlog << zTs() << "Quantum noise cut-off: " << noise_cutoff_energy_meV << " meV, relative edge width "
-              << noise_cutoff_width << std::endl;
+              << noise_cutoff_width << ", mode " << (noise_cutoff_mode == 0 ? "full" : noise_cutoff_mode == 1 ? "zero-point" : "classical-floor") << std::endl;
       }
       if(export_noise) export_open((mode == thermostat) ? ((noise_generator == pre_generated) ? "bath field q + pre-generated sample"
                                                                                             : "bath field (auxiliary oscillator q)")

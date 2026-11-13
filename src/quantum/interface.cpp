@@ -173,6 +173,15 @@ namespace quantum{
          return true;
       }
       //--------------------------------------------------------------------
+      test="noise-cutoff-mode";
+      if(word==test){
+         if(value == "full") internal::noise_cutoff_mode = 0;
+         else if(value == "zero-point") internal::noise_cutoff_mode = 1;
+         else if(value == "classical-floor") internal::noise_cutoff_mode = 2;
+         else err::fatal("Error - quantum:noise-cutoff-mode must be full, zero-point or classical-floor.");
+         return true;
+      }
+      //--------------------------------------------------------------------
       test="noise-cutoff-width";
       if(word==test){
          double d = vin::str_to_double(value);

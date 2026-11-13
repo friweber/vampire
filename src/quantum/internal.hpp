@@ -210,6 +210,7 @@ namespace quantum{
       extern int export_atom;             // atom whose noise is exported
       extern double noise_cutoff_energy_meV; // high-frequency cut-off of the pre-generated noise (meV, 0 = none)
       extern double noise_cutoff_width;      // relative width of its Fermi edge
+      extern int noise_cutoff_mode;          // 0 full spectrum, 1 zero-point term only, 2 classical floor above the cut
       extern bool fdt_monitor;            // record the FDT monitor (fdt_monitor.cpp)
       extern bool adaptive_bath;          // adaptive noise gain per frequency band (adaptive.cpp)
       extern double adaptive_eta;         // exponent of the update g <- g rho^-eta
